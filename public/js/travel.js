@@ -39,7 +39,7 @@ function lookupTraveller(traveller, paint) {
       if (seq !== traveller.seq) return;
       traveller.matches = people;
       // One match is the person; several (namesakes) wait for a choice.
-      if (people.length === 1) { traveller.code = people[0].code; traveller.name = people[0].name; }
+      if (people.length === 1) { traveller.code = people[0].code; traveller.name = people[0].name; syncPayeeCode(); }
     } catch (error) {
       if (seq !== traveller.seq) return;
       if (error.status === 401) return leave('学校 OA 登录已失效，请重新登录。');
@@ -127,6 +127,7 @@ function renderTravellers() {
       traveller.code = pick.value;
       const match = Array.isArray(traveller.matches) ? traveller.matches.find(item => item.code === pick.value) : undefined;
       if (match) { traveller.name = match.name; name.value = match.name; }
+      syncPayeeCode();
     });
     paint();
     keep(traveller, 'name', name); keep(traveller, 'code', pick);
@@ -178,6 +179,7 @@ function renderTravellers() {
     return card;
   }));
   showTravelTotal();
+  syncPayeeCode();
 }
 
 const ctripOrders = () => state.ctrip.picked.map(item => item.order);
@@ -273,7 +275,20 @@ function showTravelTotal() {
 
 /* ---------- 经费明细 and 收款人 of a 境内差旅单: several 支出项目 and payees; one of each may take the rest ---------- */
 const blankLine = () => ({ subject: '', amount: '', purpose: '' });
-const blankPayee = (code = '') => ({ code, amount: '', supplierCode: '', remitPurpose: '', suppliers: null, seq: 0 });
+/** autoCode: the code the page filled in (the login, then the first traveller found); while the code is still it, or
+ * empty, it follows the travellers. Typing another one keeps that. */
+const blankPayee = (code = '') => ({ code, autoCode: code, traveller: '', amount: '', supplierCode: '', remitPurpose: '', suppliers: null, seq: 0 });
+
+/** The first payee is the first traveller found in OA (学号/工号, paid to their card), unless the user typed another. */
+function syncPayeeCode() {
+  const payee = state.payees?.[0];
+  const traveller = state.travellers?.find(item => item.code.trim());
+  if (!payee || !traveller || (payee.code.trim() && payee.code.trim() !== payee.autoCode)) return;
+  const code = traveller.code.trim();
+  if (payee.code === code && payee.traveller === traveller.name.trim()) return;
+  Object.assign(payee, { code, autoCode: code, traveller: traveller.name.trim(), suppliers: null, supplierCode: '' });
+  renderPayees();
+}
 const yuanOf = value => (value / 100).toFixed(2);
 
 function resetMoney() {
@@ -310,6 +325,7 @@ function split(rows, total) {
 /** An amount the user types; left empty, it is the row paintAuto fills in. */
 function autoAmountInput(row, placeholder) {
   const input = Object.assign(document.createElement('input'), { className: 'num', inputMode: 'decimal', value: row.amount, placeholder });
+  input.dataset.placeholder = placeholder;
   input.addEventListener('input', () => { row.amount = input.value; showMoneyTotals(); });
   // An automatic amount is selected on focus, so typing replaces it.
   input.addEventListener('focus', () => { if (!String(row.amount).trim()) input.select(); });
@@ -321,18 +337,23 @@ function autoAmountInput(row, placeholder) {
  * so the run takes the rest of OA's own total (this one is the page's estimate); typing a value makes it manual. */
 function paintAuto(rows, total) {
   const typed = row => String(row.amount).trim();
-  const blanks = rows.filter(row => !typed(row));
+  // The first empty row takes the rest; a row added after it waits for its own amount (so adding one never empties the first).
+  const autoRow = rows.find(row => !typed(row));
   const rest = total - rows.reduce((sum, row) => sum + (typed(row) ? cents(typed(row)) ?? 0 : 0), 0);
   for (const row of rows) {
     const input = fieldOf(row, 'amount');
     // The field being edited is left alone; it is painted again on blur.
     if (!input || document.activeElement === input || typed(row)) { input?.classList.remove('auto'); continue; }
-    const auto = blanks.length === 1 && rest > 0;
+    const auto = row === autoRow && rest > 0;
     input.classList.toggle('auto', auto);
     input.value = auto ? yuanOf(rest) : '';
-    input.title = auto ? '自动填入：按页面估算的金额，保存时以 OA 算出的差旅合计为准；输入金额即改为手填，清空恢复自动' : '';
+    input.placeholder = row === autoRow ? input.dataset.placeholder : '填写金额';
+    input.title = auto ? '自动填入：总额减去其他行，按页面估算，保存时以 OA 算出的差旅合计为准；输入金额即改为手填，清空恢复自动' : '';
   }
 }
+
+/** Empty rows after the first: each still needs its amount (the first empty one takes the rest). */
+const unfilled = rows => rows.filter(row => !String(row.amount).trim()).slice(1);
 
 function renderLines() {
   if (!$('line-rows')) return;
@@ -407,6 +428,9 @@ function renderPayees() {
     const who = document.createElement('div');
     who.className = 'stack';
     who.append(code);
+    const followed = payee.traveller && payee.code.trim() === payee.autoCode;
+    code.classList.toggle('auto', Boolean(followed));
+    if (followed) who.append(Object.assign(document.createElement('span'), { className: 'note', textContent: `按出差人 ${payee.traveller} 自动填入，可改为其他学号/工号或户名。` }));
     if (payee.code.trim() && payeeIsCard(payee)) {
       who.append(Object.assign(document.createElement('span'), { className: 'note', textContent: '个人银行卡：保存时按学号/工号在 OA 中查询姓名和卡号。' }));
     }
@@ -454,11 +478,12 @@ function showMoneyTotals() {
   say($('line-total'), `经费明细合计须等于差旅合计（约 ${yuanOf(trip)} 元）。`
     + (lines.blanks ? `已填 ${yuanOf(lines.sum)} 元，自动填入的一行约 ${yuanOf(lines.rest)} 元（以 OA 算出的差旅合计为准）。`
       : `已填 ${yuanOf(lines.sum)} 元${lines.ok ? '。' : `，相差 ${yuanOf(Math.abs(lines.rest))} 元；可把其中一行留空，自动取剩余。`}`)
-    + (lines.blanks > 1 ? '只能有一行留空。' : ''), lines.ok || !trip);
+    + (lines.blanks > 1 ? `第 ${unfilled(state.lines).map(row => state.lines.indexOf(row) + 1).join('、')} 行还没有金额：填写后，自动填入的一行随之减少。` : ''), lines.ok || !trip);
   say($('payee-total'), `收款人合计须等于差旅合计减去携程冲账（约 ${yuanOf(payment)} 元${reverse ? `，已冲账 ${yuanOf(reverse)} 元` : ''}）。`
     + (payees.blanks ? `已填 ${yuanOf(payees.sum)} 元，自动填入的一位约 ${yuanOf(Math.max(0, payees.rest))} 元。`
       : `已填 ${yuanOf(payees.sum)} 元${payees.ok ? '。' : `，相差 ${yuanOf(Math.abs(payees.rest))} 元。`}`)
-    + (payees.blanks > 1 ? '只能有一位留空。' : ''), payees.ok || !trip || (payees.blanks === 1 && payees.rest === 0));
+    + (payees.blanks > 1 ? `第 ${unfilled(state.payees).map(row => state.payees.indexOf(row) + 1).join('、')} 位还没有金额：填写后，自动填入的一位随之减少。` : ''),
+    payees.ok || !trip || (payees.blanks === 1 && payees.rest === 0));
 }
 
 /** The page's lines and payees as the API takes them, or the problems found. */
@@ -477,7 +502,7 @@ function collectMoney(problems) {
   const { trip, payment } = travelEstimate();
   const lineSplit = split(state.lines, trip), payeeSplit = split(state.payees, payment);
   const lineAmounts = state.lines.map(line => fieldOf(line, 'amount'));
-  if (lineSplit.blanks > 1) problems.push(at('经费明细只能有一行金额留空（取剩余）。', ...lineAmounts));
+  if (lineSplit.blanks > 1) for (const line of unfilled(state.lines)) problems.push(at(`经费明细第 ${state.lines.indexOf(line) + 1} 行：请填写金额（留空的第一行自动取剩余）。`, fieldOf(line, 'amount')));
   else if (trip && !lineSplit.ok) problems.push(at(`经费明细合计须等于差旅合计（约 ${yuanOf(trip)} 元）；可把其中一行金额留空，自动取剩余。`, ...lineAmounts));
   const payees = state.payees.filter(payee => payee.code.trim() || String(payee.amount).trim()).map((payee, index) => {
     const where = `收款人第 ${index + 1} 位`;
@@ -492,7 +517,7 @@ function collectMoney(problems) {
       : { kind: 'bank', code: payee.code.trim(), supplierCode: payee.supplierCode, remitPurpose: payee.remitPurpose.trim(), amount: String(payee.amount).trim() };
   });
   const payeeAmounts = state.payees.map(payee => fieldOf(payee, 'amount'));
-  if (payeeSplit.blanks > 1) problems.push(at('收款人只能有一位金额留空（取剩余）。', ...payeeAmounts));
+  if (payeeSplit.blanks > 1) for (const payee of unfilled(state.payees)) problems.push(at(`收款人第 ${state.payees.indexOf(payee) + 1} 位：请填写金额（留空的第一位自动取剩余）。`, fieldOf(payee, 'amount')));
   else if (payment && !payees.length) problems.push(at('请填写收款人。', fieldOf(state.payees[0], 'code')));
   else if (payment && !(payeeSplit.ok || (payeeSplit.blanks === 1 && payeeSplit.rest === 0))) {
     problems.push(at(`收款人合计须等于差旅合计减去携程冲账（约 ${yuanOf(payment)} 元）；可把其中一位金额留空，自动取剩余。`, ...payeeAmounts));

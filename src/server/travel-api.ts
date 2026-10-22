@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { AppError } from '../domain/job';
+import { AppError, object } from '../domain/job';
 import type { OaHttpClient } from '../automation/http-login';
 import { BudgetSearchError } from '../automation/budget-search';
 import { CreateReimbursementError, createReimbursementHttp, listDraftsHttp, openFormHttp, resolveListTargetHttp, searchBudgetHttp,
@@ -10,16 +10,12 @@ import { cents, fillTravelFormHttp, HttpTravelError, searchCtripBorrowsHttp, sea
   TravelSubmitError, validateTravelInput, type FundingLine, type HttpTravelInput, type HttpTravelResult, type TravelLeg, type Traveller,
   type TravelPayee, type TravelStep, type TravelSubmitExpectation } from '../automation/travel';
 
-/** The Easy page's 境内差旅单, apart from the 用款申请单 jobs of OaApi: it reuses only the school login
- * (OaApi's session, its request queue and its reading session) through TravelHost. */
-export interface TravelHost {
-  session(): OaHttpClient;
-  serial<T>(task: () => Promise<T>): Promise<T>;
-  read<T>(task: (client: OaHttpClient, page: QueryDocument) => Promise<T>): Promise<T>;
-  reset(): void;
-  fail(error: unknown): never;
-  ownerStatus(client: OaHttpClient, billCode: string, until?: string): Promise<{ status: string; amount: string } | undefined>;
-}
+import { Created, type FormType } from './form-routes';
+import type { FormHost } from './oa-session';
+
+/** The Easy page's 境内差旅单, apart from the 用款申请单 jobs: it reuses only the school login
+ * (the session, its request queue and its reading session) through FormHost. */
+export type TravelHost = FormHost;
 
 /** One run of the page: not a job (it keeps no files), held in memory only. */
 export interface TravelRun {
@@ -247,9 +243,24 @@ export class TravelApi {
   }
 }
 
-/** Read routes under /api/oa/travel; POST /api/oa/travel itself is in app.ts (it reads the invoices). */
-export async function handleTravelRoute(api: TravelApi, method: string, url: URL): Promise<unknown | undefined> {
+/** Routes under /api/oa/travel: POST starts a run with the page's form and invoices, the rest read or stop it. */
+export function travelType(api: TravelApi): FormType {
+  return { name: '境内差旅单', route: (method, url, body, context) => handleTravelRoute(api, method, url, body, context) };
+}
+
+async function handleTravelRoute(api: TravelApi, method: string, url: URL, body: () => Promise<unknown>,
+  context: Parameters<FormType['route']>[3]): Promise<unknown | undefined> {
   switch (`${method} ${url.pathname}`) {
+    case 'POST /api/oa/travel': {
+      const data = object(await body());
+      if (data.confirmed !== true) throw new AppError(400, '请先确认全部差旅单信息。');
+      if (!context.liveEnabled) throw new AppError(403, '真实 OA 执行未启用，请在 .env 中设置 OA_LIVE_ENABLED=true 并重启服务。');
+      if (data.documentNumber !== undefined && data.documentNumber !== null
+        && (typeof data.documentNumber !== 'string' || !/^D\d{1,32}$/.test(data.documentNumber))) throw new AppError(400, '差旅单编号无效。');
+      if (data.action !== undefined && data.action !== 'save' && data.action !== 'submit') throw new AppError(400, '请选择只保存，或保存后提交流转。');
+      return new Created(api.start(data.input, (data.documentNumber as string | null | undefined) ?? null, await context.readInvoices(data.invoices),
+        data.action === 'submit' ? 'submit' : 'save'));
+    }
     case 'GET /api/oa/travel': return api.status();
     case 'GET /api/oa/travel/forms': return api.forms();
     case 'GET /api/oa/travel/budgets': return api.budgets(url.searchParams);

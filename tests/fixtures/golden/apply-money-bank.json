@@ -1,0 +1,1177 @@
+[
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementInvoice/slicedQueryRbReimbursementInvoices.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "page",
+          "1"
+        ],
+        [
+          "pagesize",
+          "10"
+        ],
+        [
+          "sortname",
+          "invoiceCode"
+        ],
+        [
+          "sortorder",
+          "asc"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/rbReimbursement/showLoadRbReimbursement.job",
+    "query": [
+      [
+        "bizId",
+        "0123456789ABCDEF0123456789ABCDEF"
+      ],
+      [
+        "taskId",
+        "11111111-2222-3333-4444-555555555555"
+      ]
+    ],
+    "headers": {
+      "accept-language": "zh-CN,zh;q=0.9",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/easySearch.load",
+    "headers": {
+      "accept": "text/plain, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "queryName",
+          "queryFundingItems"
+        ],
+        [
+          "pageSize",
+          "100"
+        ],
+        [
+          "configType",
+          "tech"
+        ],
+        [
+          "paramValue",
+          "P001"
+        ],
+        [
+          "fundingItemKind",
+          "1"
+        ],
+        [
+          "accountBook",
+          "ST00"
+        ],
+        [
+          "isMultipleSelect",
+          "false"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimburFundingItems/queryChooseBudgetOutlays.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "accountBook",
+          "ST00"
+        ],
+        [
+          "reimbursementKind",
+          "applyMoney"
+        ],
+        [
+          "fundingItemsCode",
+          "P001"
+        ],
+        [
+          "page",
+          "1"
+        ],
+        [
+          "pagesize",
+          "20"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/loadInvoiceFolderList1.ajax",
+    "headers": {
+      "accept": "application/json",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/queryBillImageListForClaims4WsNew.ajax",
+    "query": [
+      [
+        "invoiceStatus",
+        "未报销"
+      ],
+      [
+        "folderId",
+        "2038513290682167297"
+      ],
+      [
+        "page",
+        "1"
+      ],
+      [
+        "pagesize",
+        "100"
+      ],
+      [
+        "queryName",
+        "invoiceBillList"
+      ],
+      [
+        "configType",
+        "invoice"
+      ],
+      [
+        "status",
+        "1"
+      ],
+      [
+        "orgKindId",
+        "psm"
+      ],
+      [
+        "invoiceReimbursementId",
+        ""
+      ]
+    ],
+    "headers": {
+      "accept": "application/json",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/queryBillImageListForClaims4WsNew.ajax",
+    "query": [
+      [
+        "invoiceStatus",
+        "未报销"
+      ],
+      [
+        "folderId",
+        "1879423340632997890"
+      ],
+      [
+        "page",
+        "1"
+      ],
+      [
+        "pagesize",
+        "100"
+      ],
+      [
+        "queryName",
+        "invoiceBillList"
+      ],
+      [
+        "configType",
+        "invoice"
+      ],
+      [
+        "status",
+        "1"
+      ],
+      [
+        "orgKindId",
+        "psm"
+      ],
+      [
+        "invoiceReimbursementId",
+        ""
+      ]
+    ],
+    "headers": {
+      "accept": "application/json",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/loadInvoiceFolderList1.ajax",
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/reimburInvoiceFolder/uploadFillingInvoiceFiles.ajax",
+    "query": [
+      [
+        "csrfToken",
+        "159BB12842D0416DB2346681665A567F"
+      ]
+    ],
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "multipart/form-data; boundary=<boundary>",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": {
+      "multipart": [
+        {
+          "headers": [
+            "Content-Disposition: form-data; name=\"backurl\""
+          ],
+          "body": "doSave"
+        },
+        {
+          "headers": [
+            "Content-Disposition: form-data; name=\"folderId\""
+          ],
+          "body": "2038513290682167297"
+        },
+        {
+          "headers": [
+            "Content-Disposition: form-data; name=\"upload\"; filename=\"发票.pdf\"",
+            "Content-Type: application/pdf"
+          ],
+          "body": "%PDF-1.7 test"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/queryBillImageListForClaims4WsNew.ajax",
+    "query": [
+      [
+        "invoiceStatus",
+        "未报销"
+      ],
+      [
+        "folderId",
+        "2038513290682167297"
+      ],
+      [
+        "page",
+        "1"
+      ],
+      [
+        "pagesize",
+        "100"
+      ],
+      [
+        "queryName",
+        "invoiceBillList"
+      ],
+      [
+        "configType",
+        "invoice"
+      ],
+      [
+        "status",
+        "1"
+      ],
+      [
+        "orgKindId",
+        "psm"
+      ],
+      [
+        "invoiceReimbursementId",
+        "0123456789ABCDEF0123456789ABCDEF"
+      ]
+    ],
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/reimburInvoiceFolder/queryBillImageListForClaims4WsNew.ajax",
+    "query": [
+      [
+        "invoiceStatus",
+        "未报销"
+      ],
+      [
+        "folderId",
+        "2038513290682167297"
+      ],
+      [
+        "page",
+        "1"
+      ],
+      [
+        "pagesize",
+        "100"
+      ],
+      [
+        "queryName",
+        "invoiceBillList"
+      ],
+      [
+        "configType",
+        "invoice"
+      ],
+      [
+        "status",
+        "1"
+      ],
+      [
+        "orgKindId",
+        "psm"
+      ],
+      [
+        "invoiceReimbursementId",
+        "0123456789ABCDEF0123456789ABCDEF"
+      ]
+    ],
+    "headers": {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimburFundingItems/saveRbReimburBudgetOutlays.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "projectCode",
+          "P001"
+        ],
+        [
+          "projectName",
+          "测试项目"
+        ],
+        [
+          "deptCode",
+          "D01"
+        ],
+        [
+          "deptName",
+          "测试组"
+        ],
+        [
+          "requireAmount",
+          "197,984.93"
+        ],
+        [
+          "showAmount",
+          "197984.93"
+        ],
+        [
+          "manager",
+          "100001"
+        ],
+        [
+          "budgetOutlays",
+          [
+            {
+              "quotaName": "业务费",
+              "budgetBalance": "9000",
+              "expenditureItemCode": "302",
+              "projectCode": "P001",
+              "showAmount": "9000",
+              "projectName": "测试项目",
+              "expenditureItemName": "委托服务费",
+              "quotaCode": "Q1"
+            }
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementInvoice/insertRbReimbursementInvoice1.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/json; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "json": {
+        "insertRecords": [
+          {
+            "invoiceId": "INV1",
+            "billTypeName": "电子发票",
+            "salerName": "某科技公司",
+            "allValoremTax": "200.00",
+            "invoiceNumber": "",
+            "invoiceCode": "26422000000000000001",
+            "billClaimState": "UNDOING",
+            "invoiceBalance": "200.00",
+            "invoiceFilesId": "F1",
+            "reimbursementId": "0123456789ABCDEF0123456789ABCDEF",
+            "reimbursementSettleName": "某科技公司",
+            "actualAmount": "200.00",
+            "flag": true
+          }
+        ],
+        "pendingRecords": [],
+        "updateRecords": [],
+        "removeRecords": []
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementInvoice/slicedQueryRbReimbursementInvoices.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "page",
+          "1"
+        ],
+        [
+          "pagesize",
+          "20"
+        ],
+        [
+          "sortname",
+          "invoiceCode"
+        ],
+        [
+          "sortorder",
+          "asc"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/querySettlementKindByReimbursementId.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/showInsertRbReimburSettleKind.load",
+    "headers": {
+      "accept": "text/plain, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementKind",
+          "applyMoney"
+        ],
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/insertRbReimburSettleKind.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "settleKindIds",
+          "A8E2528E79B94F06AF6912494A0DEF05"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/querySettlementKindByReimbursementId.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/queryRbReimbursementSettle.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "reimburSettleKindId",
+          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        ],
+        [
+          "sortname",
+          "createdDate"
+        ],
+        [
+          "sortorder",
+          "desc"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/mmSupplier/slicedQueryMmSupplier.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "supplierKind",
+          "1"
+        ],
+        [
+          "keyValue",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "status",
+          "1"
+        ],
+        [
+          "isBank",
+          "1"
+        ],
+        [
+          "page",
+          "1"
+        ],
+        [
+          "pagesize",
+          "50"
+        ],
+        [
+          "sortname",
+          "code"
+        ],
+        [
+          "sortorder",
+          "asc"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/showInsertRbReimbursementSettle.load",
+    "headers": {
+      "accept": "text/plain, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "supplierName",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "openingBankName",
+          "上海银行市政大厦支行"
+        ],
+        [
+          "isMainData",
+          "1"
+        ],
+        [
+          "code",
+          "1000014428"
+        ],
+        [
+          "openingBankAddress",
+          ""
+        ],
+        [
+          "payeeCode",
+          "31663803001390901"
+        ],
+        [
+          "supplierCode",
+          "1000014428"
+        ],
+        [
+          "statusTextView",
+          "启用"
+        ],
+        [
+          "payee",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "name",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "id",
+          ""
+        ],
+        [
+          "isMainDataTextView",
+          "是"
+        ],
+        [
+          "ownedBank",
+          "上海银行"
+        ],
+        [
+          "status",
+          "1"
+        ],
+        [
+          "isSelectHistory",
+          "1"
+        ],
+        [
+          "isCash",
+          "0"
+        ],
+        [
+          "reimburSettleKindId",
+          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        ],
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimbursementSettlement/saveRbReimbursementSettle.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "id",
+          ""
+        ],
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "supplierCode",
+          "1000014428"
+        ],
+        [
+          "supplierName",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "reimburSettleKindId",
+          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        ],
+        [
+          "transferPointId",
+          ""
+        ],
+        [
+          "rbSettlementKindCode",
+          "tech.rb.settlement.kind.006"
+        ],
+        [
+          "payee",
+          "上海上勤餐饮管理有限公司"
+        ],
+        [
+          "payeeCode",
+          "31663803001390901"
+        ],
+        [
+          "ownedBank",
+          "上海银行"
+        ],
+        [
+          "openingBankName",
+          "上海银行市政大厦支行"
+        ],
+        [
+          "purpose",
+          "会议餐费"
+        ],
+        [
+          "paymentAmount",
+          "200.00"
+        ],
+        [
+          "isSelectHistory",
+          "1"
+        ],
+        [
+          "isCash",
+          "0"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/rbReimburFundingItems/queryRbReimburBudgetOutlays.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "reimbursementId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "fundingItemsId",
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ],
+        [
+          "sortfields",
+          []
+        ]
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/rbReimbursement/showLoadRbReimbursement.job",
+    "query": [
+      [
+        "bizId",
+        "0123456789ABCDEF0123456789ABCDEF"
+      ],
+      [
+        "taskId",
+        "11111111-2222-3333-4444-555555555555"
+      ]
+    ],
+    "headers": {
+      "accept-language": "zh-CN,zh;q=0.9",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  },
+  {
+    "method": "POST",
+    "path": "/bpm-new/workflow/saveBizData.ajax",
+    "headers": {
+      "accept": "application/json, text/javascript, */*; q=0.01",
+      "accept-language": "zh-CN,zh;q=0.9",
+      "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "csrfToken": "159BB12842D0416DB2346681665A567F",
+      "origin": "https://sapbpm-new.shanghaitech.edu.cn:9091",
+      "procTaskId": "11111111-2222-3333-4444-555555555555",
+      "referer": "https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=0123456789ABCDEF0123456789ABCDEF&taskId=11111111-2222-3333-4444-555555555555",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      "x-requested-with": "XMLHttpRequest"
+    },
+    "body": {
+      "form": [
+        [
+          "id",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "billCode",
+          "A209900000022"
+        ],
+        [
+          "fillinDate",
+          "2026-10-15"
+        ],
+        [
+          "fullId",
+          ""
+        ],
+        [
+          "organId",
+          ""
+        ],
+        [
+          "organName",
+          "上海科技大学&测试"
+        ],
+        [
+          "deptId",
+          ""
+        ],
+        [
+          "positionId",
+          ""
+        ],
+        [
+          "positionName",
+          ""
+        ],
+        [
+          "personMemberId",
+          ""
+        ],
+        [
+          "reimbursementKind",
+          ""
+        ],
+        [
+          "personId",
+          ""
+        ],
+        [
+          "accountBook",
+          ""
+        ],
+        [
+          "hasFinancialResponsiblePerson",
+          ""
+        ],
+        [
+          "disableBackSubProcUnitIds",
+          ""
+        ],
+        [
+          "personCode",
+          ""
+        ],
+        [
+          "personMemberName",
+          ""
+        ],
+        [
+          "deptName",
+          ""
+        ],
+        [
+          "mobilePhone",
+          ""
+        ],
+        [
+          "officePhone",
+          ""
+        ],
+        [
+          "emali",
+          ""
+        ],
+        [
+          "bizId",
+          "0123456789ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "procUnitId",
+          "Apply"
+        ],
+        [
+          "procInstId",
+          "900001"
+        ],
+        [
+          "taskKindId",
+          "task"
+        ],
+        [
+          "taskId",
+          "11111111-2222-3333-4444-555555555555"
+        ],
+        [
+          "flowKind",
+          "APPROVAL"
+        ],
+        [
+          "currentHandleSequence",
+          "0"
+        ],
+        [
+          "currentHandleGroupId",
+          "0"
+        ],
+        [
+          "handleResult",
+          "0"
+        ],
+        [
+          "handleOpinion",
+          ""
+        ],
+        [
+          "remark",
+          "大模型 API 费用 & 测试"
+        ],
+        [
+          "budgetOutlays",
+          [
+            {
+              "amount": "200.00",
+              "quotaName": "业务费",
+              "expenditureItemCode": "302",
+              "attachmentNumber": "1",
+              "remark": "大模型API使用费",
+              "version": 3,
+              "fundingItemsId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              "id": "D1",
+              "expenditureItemName": "委托服务费",
+              "reimbursementId": "0123456789ABCDEF0123456789ABCDEF"
+            }
+          ]
+        ],
+        [
+          "writeOffs",
+          []
+        ],
+        [
+          "currencyKind",
+          "0"
+        ]
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/bpm-new/rbReimbursement/showLoadRbReimbursement.job",
+    "query": [
+      [
+        "bizId",
+        "0123456789ABCDEF0123456789ABCDEF"
+      ],
+      [
+        "taskId",
+        "11111111-2222-3333-4444-555555555555"
+      ]
+    ],
+    "headers": {
+      "accept-language": "zh-CN,zh;q=0.9",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    },
+    "body": null
+  }
+]

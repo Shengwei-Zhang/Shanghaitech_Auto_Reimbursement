@@ -10,6 +10,7 @@
     "start:compiled": "node dist/server/main.js",
     "build": "tsc",
     "check": "tsc --noEmit",
+    "new-form": "node scripts/new-form.mjs",
     "test": "npm run build && node --test tests/*.test.cjs && playwright test tests/legacy-core.spec.ts tests/easy-page.spec.ts",
     "automation:cli": "npm run build && node dist/cli.js",
     "batch:check": "npm run build && node dist/batch.js check",

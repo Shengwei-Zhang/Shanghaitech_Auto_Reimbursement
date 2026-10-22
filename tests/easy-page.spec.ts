@@ -90,9 +90,11 @@ test('用款申请单: fund, budget item, a folder invoice, payee and purpose be
   await page.click('#submit');
   await expect(page.locator('#jobs-card')).toBeVisible();
   const submit = stub.posts.find(post => post.path === '/api/oa/submit')!;
-  expect(submit.body).toMatchObject({ confirmed: true, action: 'save', documentNumber: null,
+  // Exactly this body: a field added or dropped by a refactor fails here.
+  expect(submit.body).toEqual({ confirmed: true, action: 'save', documentNumber: null,
     invoices: [{ folderId: '1879423340632997890', number: '26117000000000000041' }],
-    input: { fundingKeyword: 'P001', budgetKeyword: '委托服务费', amount: '300.00', attachmentCount: 1, payeeCode: '900001', purpose: '大模型API使用费' } });
+    input: { reimbursementType: '用款申请单', fundingKindKeyword: '被授权的项目', fundingKeyword: 'P001', budgetKeyword: '委托服务费',
+      amount: '300.00', attachmentCount: 1, payeeCode: '900001', purpose: '大模型API使用费', reason: '' } });
   expect(stub.posts.some(post => post.path === '/api/oa/travel')).toBe(false);
   expect(stub.errors).toEqual([]);
 });
@@ -128,7 +130,7 @@ test('境内差旅单: its own budget query, a traveller found by name, two line
   await expect(cell(7)).toHaveAttribute('placeholder', '标准 360.00');
   await cell(9).fill('2400');
 
-  // 经费明细: 会议费 2400 + 国内差旅 the rest; 收款人: 报销人甲 2400 + 教师乙 the rest.
+  // 经费明细: 会议费 2400 + 国内差旅 the rest; 收款人: 教师乙 (followed from the traveller) 2400 + 报销人甲 the rest.
   await page.click('#line-add');
   const second = page.locator('#line-rows tr').nth(1);
   await second.locator('select').selectOption('02:10');
@@ -139,7 +141,8 @@ test('境内差旅单: its own budget query, a traveller found by name, two line
   await page.locator('#payee-rows tr:first-child input.num').fill('2400');
   await page.click('#payee-add');
   const payee = page.locator('#payee-rows tr').nth(1);
-  await payee.locator('input').first().fill('900002');
+  await expect(page.locator('#payee-rows tr:first-child input').first()).toHaveValue('900002');
+  await payee.locator('input').first().fill('900001');
   await payee.locator('input').first().dispatchEvent('change');
   await expect(page.locator('#payee-total')).toContainText('自动填入的一位约 1360.00 元');
   // Amount right after the payee; the transfer column only for a 银行汇款.
@@ -158,12 +161,14 @@ test('境内差旅单: its own budget query, a traveller found by name, two line
   await expect(page.locator('#travel-card .travel-note')).toBeVisible();
 
   const travel = stub.posts.find(post => post.path === '/api/oa/travel')!;
-  expect(travel.body).toMatchObject({ confirmed: true, action: 'save', documentNumber: null, invoices: [], input: {
-    fundingCode: '2099F9999-000-01', attachmentCount: 1, reason: '教师乙北京出差', ctripOrders: [],
+  // Exactly this body: a field added or dropped by a refactor fails here.
+  expect(travel.body).toEqual({ confirmed: true, action: 'save', documentNumber: null, invoices: [], input: {
+    fundingKind: 'authorized', fundingCode: '2099F9999-000-01', attachmentCount: 1, reason: '教师乙北京出差', explain: '', ctripOrders: [],
     lines: [{ budgetName: '国内差旅/参会费', amount: '', purpose: '交通与补贴' }, { budgetName: '会议费', amount: '2400', purpose: '会议注册费' }],
-    payees: [{ kind: 'card', code: '900001', amount: '2400' }, { kind: 'card', code: '900002', amount: '' }],
+    payees: [{ kind: 'card', code: '900002', amount: '2400' }, { kind: 'card', code: '900001', amount: '' }],
     travellers: [{ kind: 'staff', code: '900002', name: '教师乙', legs: [{ startDate: '2026-10-19', startAddress: '上海', arriveDate: '2026-10-20',
-      arriveAddress: '北京', vehicle: 'aircraft', trafficExpense: '1000', travelDays: 2, subsidyAmount: '', meetingAmount: '2400' }] }] } });
+      arriveAddress: '北京', vehicle: 'aircraft', trafficExpense: '1000', travelDays: 2, subsidyAmount: '', hotelExpense: '', meetingAmount: '2400',
+      otherAmount: '' }] }] } });
   expect(stub.posts.some(post => post.path === '/api/oa/submit')).toBe(false);
   expect(stub.errors).toEqual([]);
 });
@@ -367,4 +372,47 @@ test('差旅天数 only have to add up to the whole trip; any one leg may hold t
   await expect(page.locator('#claim-error')).toContainText('各段差旅天数合计 4 天，应等于行程总天数 3 天');
   await expect(cell(0, 6)).toHaveClass(/field-invalid/);
   await expect(cell(1, 6)).toHaveClass(/field-invalid/);
+});
+
+test('the payee follows the traveller found in OA, until another payee is typed', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  const payee = page.locator('#payee-rows tr:first-child input').first();
+  // Before any traveller: the login's own 工号.
+  await expect(payee).toHaveValue('900001');
+  await page.locator('.traveller-head input').first().fill('教师乙');
+  await expect(payee).toHaveValue('900002');
+  await expect(payee).toHaveClass(/\bauto\b/);
+  await expect(page.locator('#payee-rows')).toContainText('按出差人 教师乙 自动填入');
+  // Typed by hand, it stays.
+  await payee.fill('2020000001');
+  await payee.dispatchEvent('change');
+  await page.locator('.traveller-head input').first().fill('');
+  await page.locator('.traveller-head input').first().fill('教师乙');
+  await expect(page.locator('.traveller-head select').nth(1)).toHaveValue('900002');
+  await expect(payee).toHaveValue('2020000001');
+});
+
+test('adding a payee keeps the first one\'s amount: it takes what the others leave, the total stays what is owed', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  const card = page.locator('.traveller').first();
+  const cell = (index: number) => card.locator('.legs tbody tr').first().locator('td').nth(index).locator('input, select').first();
+  await cell(5).fill('1000'); await cell(6).fill('0');
+  const first = page.locator('#payee-rows tr').nth(0).locator('input.num');
+  await expect(first).toHaveValue('1000.00');
+  await page.click('#payee-add');
+  const second = page.locator('#payee-rows tr').nth(1).locator('input.num');
+  await expect(first).toHaveValue('1000.00');
+  await expect(second).toHaveValue('');
+  await expect(second).toHaveAttribute('placeholder', '填写金额');
+  await expect(page.locator('#payee-total')).toContainText('第 2 位还没有金额');
+  await second.fill('300');
+  await expect(first).toHaveValue('700.00');
+  await expect(page.locator('#payee-total')).not.toHaveClass(/error/);
+  // The same for 经费明细 (its rows need the fund's 支出项目).
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  await expect(page.locator('#line-add')).toBeEnabled();
+  await page.click('#line-add');
+  await expect(page.locator('#line-rows tr').nth(0).locator('input.num')).toHaveValue('1000.00');
 });

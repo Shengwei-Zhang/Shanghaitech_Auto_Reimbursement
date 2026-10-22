@@ -2,18 +2,18 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { AppError, MAX_INVOICES, object } from '../domain/job';
+import { AppError, object } from '../domain/job';
 import { buildItinerary, sanitizeItems } from '../domain/itinerary';
 import { parseItineraryFile } from '../infrastructure/itinerary-files';
 
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
-import { writeSessionState } from '../automation/session-state';
 import { JobStore } from '../infrastructure/job-store';
 import { DeepSeekAdvisor, type Advisor } from '../infrastructure/deepseek';
 import { JobService, inspectInvoice, splitInvoicePdf, launchWorker, LOCAL_OWNER, type LaunchWorker } from '../application/job-service';
 import type { SiteProfile } from '../domain/workflow';
 import { CONTRACTS } from '../automation/contracts';
 import { OaApi, handleOaRoute } from './oa-api';
+import { Created, type FormContext } from './form-routes';
 import { pagePath } from './page-path';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
@@ -24,9 +24,6 @@ const MAX_BODY = 12 * 1024 * 1024;
 const STATIC_FILES: Record<string, [string, string]> = {
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
   '/easy.css': ['easy.css', 'text/css; charset=utf-8'],
-  // The Easy page's modules, one per shared part and per 报销类型 (see public/js/main.js).
-  ...Object.fromEntries(['core', 'login', 'funding', 'invoices', 'apply-money', 'travel', 'itinerary', 'main']
-    .map(name => [`/js/${name}.js`, [`js/${name}.js`, 'text/javascript; charset=utf-8'] as [string, string]])),
   [PAGE_PATH]: ['easy-v2.html', 'text/html; charset=utf-8'],
   '/easy-v2.css': ['easy-v2.css', 'text/css; charset=utf-8'],
   '/print.js': ['print.js', 'text/javascript; charset=utf-8'],
@@ -78,82 +75,15 @@ export function createApp(options: AppOptions) {
   const sessionSecret = randomBytes(32).toString('hex');
   const csrfSecret = randomBytes(32).toString('hex');
   const publicDir = options.publicDir || path.resolve(__dirname, '../../public');
+  // The page's modules, one per shared part and per 报销类型 (see public/js/main.js): every public/js/*.js, so a new
+  // 报销类型's module is served without listing it here. Only plain names; nothing below public/js.
+  const pageModules: Record<string, [string, string]> = Object.fromEntries((fs.existsSync(path.join(publicDir, 'js'))
+    ? fs.readdirSync(path.join(publicDir, 'js')) : []).filter(name => /^[a-z][a-z0-9-]*\.js$/.test(name))
+    .map(name => [`/js/${name}`, [`js/${name}`, 'text/javascript; charset=utf-8'] as [string, string]]));
 
-  /** One page → one live job: the chosen blank form (or a new one), the inputs and the
-   * invoice; the browser continues the page's school login instead of logging in again. */
-  async function submitFromEasyPage(value: unknown) {
-    const data = object(value);
-    if (data.confirmed !== true) throw new AppError(400, '请先确认全部报销信息。');
-    if (data.action !== 'save' && data.action !== 'submit') throw new AppError(400, '请选择只保存，或保存后提交流转。');
-    if (!service.liveEnabled) throw new AppError(403, '真实 OA 执行未启用，请在 .env 中设置 OA_LIVE_ENABLED=true 并重启服务。');
-    const uploads = data.invoices === undefined ? [data.invoice] : data.invoices;
-    if (!Array.isArray(uploads) || !uploads.length || uploads.length > MAX_INVOICES) throw new AppError(400, `每张报销单可关联 1–${MAX_INVOICES} 张发票。`);
-    const numbers: string[] = [];
-    const picks: Array<{ folderId: string; number: string }> = [];
-    for (const upload of uploads) {
-      const item = object(upload);
-      let number: string;
-      if (item.folderId !== undefined) {
-        if (typeof item.folderId !== 'string' || !/^\d{1,32}$/.test(item.folderId) || typeof item.number !== 'string' || !/^\d{20}$/.test(item.number)) {
-          throw new AppError(400, '票夹发票参数无效。');
-        }
-        picks.push({ folderId: item.folderId, number: item.number });
-        number = item.number;
-      } else {
-        const { invoice } = await inspectInvoice(upload);
-        if (!invoice.number) throw new AppError(400, '未能从 PDF 识别发票号码，无法核对是否已报销。');
-        number = invoice.number;
-      }
-      if (numbers.includes(number)) throw new AppError(400, `同一张发票（${number}）选择了多次。`);
-      numbers.push(number);
-    }
-    const folder = await oaApi.pickedInvoices(picks);
-    const { target, storageState } = await oaApi.handoff(data.documentNumber ?? null);
-    const { formMode: _mode, target: _target, ...input } = object(data.input);
-    const job = await service.create({ mode: 'live', action: data.action, invoices: uploads,
-      input: { ...input, ...(target ? { formMode: 'target', target } : { formMode: 'new' }) } }, { folder })
-      .catch(error => { if (target) oaApi.release(target.documentNumber); throw error; });
-    const file = path.join(store.directory(job.id), 'oa-session.json');
-    try {
-      await writeSessionState(storageState, file);
-      return service.start(job.id, { confirmed: true, loginMode: 'manual' }, file);
-    } catch (error) {
-      fs.rmSync(file, { force: true });
-      service.cancel(job.id);
-      if (target) oaApi.release(target.documentNumber);
-      throw error instanceof AppError ? error : new AppError(500, '未能启动执行，任务已取消，没有操作 OA。');
-    }
-  }
-
-  /** The page's invoices for a 境内差旅单: PDFs read here like a job's, folder picks re-read in OA. */
-  async function travelInvoices(value: unknown): Promise<Array<{ fileName: string; number: string; bytes?: Buffer; folderId?: string }>> {
-    const uploads = value === undefined ? [] : value;
-    if (!Array.isArray(uploads) || uploads.length > MAX_INVOICES) throw new AppError(400, `每张报销单可关联 0–${MAX_INVOICES} 张发票。`);
-    const invoices: Array<{ fileName: string; number: string; bytes?: Buffer; folderId?: string }> = [];
-    const picks: Array<{ folderId: string; number: string }> = [];
-    for (const upload of uploads) {
-      const item = object(upload);
-      if (item.folderId !== undefined) {
-        if (typeof item.folderId !== 'string' || !/^\d{1,32}$/.test(item.folderId) || typeof item.number !== 'string' || !/^\d{20}$/.test(item.number)) {
-          throw new AppError(400, '票夹发票参数无效。');
-        }
-        picks.push({ folderId: item.folderId, number: item.number });
-        invoices.push({ fileName: '', number: item.number, folderId: item.folderId });
-      } else {
-        const { invoice, buffer } = await inspectInvoice(upload);
-        if (!invoice.number) throw new AppError(400, '未能从 PDF 识别发票号码，无法核对是否已报销。');
-        invoices.push({ fileName: invoice.name, number: invoice.number, bytes: buffer });
-      }
-      if (invoices.filter(entry => entry.number === invoices[invoices.length - 1].number).length > 1) {
-        throw new AppError(400, `同一张发票（${invoices[invoices.length - 1].number}）选择了多次。`);
-      }
-    }
-    for (const picked of await oaApi.pickedInvoices(picks)) {
-      const entry = invoices.find(item => item.folderId === picked.folderId && item.number === picked.number);
-      if (entry) entry.fileName = picked.name;
-    }
-    return invoices;
-  }
+  oaApi.useJobs({ service, store });
+  /** What each 报销类型's routes may use besides the login. */
+  const context: FormContext = { liveEnabled: service.liveEnabled, readInvoices: value => oaApi.pageInvoices(value) };
 
   const server = http.createServer(async (req, res) => {
     const json = (status: number, data: unknown) => {
@@ -194,21 +124,11 @@ export function createApp(options: AppOptions) {
         if (req.method !== 'GET' && !equalSecret(String(req.headers['x-csrf-token'] || ''), csrfSecret)) {
           throw new AppError(403, '请求校验失败，请刷新页面后重试。');
         }
-        if (req.method === 'POST' && url.pathname === '/api/oa/submit') return json(201, { job: await submitFromEasyPage(await readJson(req)) });
-        if (req.method === 'POST' && url.pathname === '/api/oa/travel') {
-          const data = object(await readJson(req));
-          if (data.confirmed !== true) throw new AppError(400, '请先确认全部差旅单信息。');
-          if (!service.liveEnabled) throw new AppError(403, '真实 OA 执行未启用，请在 .env 中设置 OA_LIVE_ENABLED=true 并重启服务。');
-          if (data.documentNumber !== undefined && data.documentNumber !== null
-            && (typeof data.documentNumber !== 'string' || !/^D\d{1,32}$/.test(data.documentNumber))) throw new AppError(400, '差旅单编号无效。');
-          if (data.action !== undefined && data.action !== 'save' && data.action !== 'submit') throw new AppError(400, '请选择只保存，或保存后提交流转。');
-          return json(201, oaApi.travel.start(data.input, (data.documentNumber as string | null | undefined) ?? null, await travelInvoices(data.invoices),
-            data.action === 'submit' ? 'submit' : 'save'));
-        }
+        // The login, shared queries and every 报销类型's own routes (oa-api.ts).
         if (url.pathname.startsWith('/api/oa/')) {
-          const result = await handleOaRoute(oaApi, req.method || 'GET', url, () => readJson(req));
+          const result = await handleOaRoute(oaApi, req.method || 'GET', url, () => readJson(req), context);
           if (result === undefined) throw new AppError(404, '接口不存在。');
-          return json(200, result);
+          return result instanceof Created ? json(201, result.body) : json(200, result);
         }
         if (req.method === 'POST' && url.pathname === '/api/invoices/inspect') {
           const { invoice } = await inspectInvoice(await readJson(req));
@@ -264,7 +184,8 @@ export function createApp(options: AppOptions) {
         res.writeHead(302, { Location: PAGE_PATH });
         return res.end();
       }
-      const file = STATIC_FILES[url.pathname];
+      const file = Object.hasOwn(STATIC_FILES, url.pathname) ? STATIC_FILES[url.pathname]
+        : Object.hasOwn(pageModules, url.pathname) ? pageModules[url.pathname] : undefined;
       if (req.method === 'GET' && file) {
         res.writeHead(200, { 'Content-Type': file[1] });
         res.end(fs.readFileSync(path.join(publicDir, file[0])));

@@ -92,7 +92,7 @@ function oa(overrides = {}) {
     const { pathname } = new URL(url);
     const name = pathname.split('/').pop();
     const form = typeof init.body === 'string' && !init.body.startsWith('{') ? new URLSearchParams(init.body) : undefined;
-    const call = { name, url, form };
+    const call = { name, url, method: init.method, headers: init.headers, form, raw: init.body };
     calls.push(call);
     if (overrides[name]) { const reply = await overrides[name](call, state); if (reply) return reply; }
     switch (name) {
@@ -447,4 +447,26 @@ test('a balance OA does not show (showAmount empty) is sent back empty and not c
   const save = calls.find(call => call.name === 'saveRbReimburBudgetOutlays.ajax').form;
   assert.equal(save.get('showAmount'), '', 'showAmount goes back as OA gave it');
   assert.equal(save.get('requireAmount'), '193,110.83');
+});
+
+const { matchGolden } = require('./golden.cjs');
+
+test('请求基准 境内差旅单: two travellers, 携程 write-offs, fill and submit send exactly the recorded requests', async () => {
+  const { calls, client } = oa();
+  await fillTravelFormHttp(client, FORM, INPUT);
+  await submitTravelFormHttp(client, FORM, SUBMIT);
+  matchGolden('travel-submit', calls);
+});
+
+test('请求基准 境内差旅单: several 经费明细 lines and payees', async () => {
+  const { calls, client } = oa();
+  await fillTravelFormHttp(client, FORM, { ...INPUT, lines: [{ budgetName: '会议费', amount: '2000', purpose: '会议注册费' },
+    { budgetName: '国内差旅/参会费', purpose: '交通与住宿' }], payees: [{ kind: 'card', code: '900001', amount: '1000' }, { kind: 'card', code: '900002' }] });
+  matchGolden('travel-lines-payees', calls);
+});
+
+test('请求基准 境内差旅单: an invoice picked from an OA folder', async () => {
+  const { calls, client } = oa();
+  await fillTravelFormHttp(client, FORM, { ...INPUT, invoices: [{ fileName: 'hotel.pdf', number: INVOICE, folderId: FOLDER }] });
+  matchGolden('travel-folder-invoice', calls);
 });

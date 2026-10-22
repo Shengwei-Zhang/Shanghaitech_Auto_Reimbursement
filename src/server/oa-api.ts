@@ -1,325 +1,67 @@
-import { AppError, invoiceFileName, jobInvoices, type FormTarget } from '../domain/job';
-import { establishBpmSession, HttpLoginError, IDS_ORIGIN, loginWithPassword, OaHttpClient } from '../automation/http-login';
-import { CreateReimbursementError, createReimbursementHttp, isBlankApplyMoneyHttp, listApplyMoneyTodosHttp, openFormHttp,
-  openOwnerQueryHttp, searchBudgetHttp, searchFundingHttp, searchOwnerHttp, type ApplyMoneyTodo, type HttpForm, type QueryDocument } from '../automation/http-bpm';
-import { writeSessionState, type StorageState } from '../automation/session-state';
+import { AppError, MAX_INVOICES, object, type Invoice, type WorkerEvent, type WorkerRequest } from '../domain/job';
+import { searchFundingHttp } from '../automation/http-bpm';
 import type { LaunchWorker } from '../application/job-service';
-import { OpenReimbursementError } from '../automation/open-reimbursement';
-import { ReimbursementListError } from '../automation/reimbursement-list';
-import { FundingSearchError, FUNDING_KINDS } from '../automation/funding-search';
-import { BudgetSearchError } from '../automation/budget-search';
-import { TaskSearchError } from '../automation/task-search';
-import { checkInvoiceClaimHttp, claimMessage, listFolderInvoicesHttp, InvoiceClaimError, type FolderInvoice, type InvoiceClaim } from '../automation/invoice-claim';
-import { cents, fillFormHttp, formInvoiceCount, fundingTabs, HttpFillError, type FillStep } from '../automation/http-fill';
-import { HttpSubmitError, submitFormHttp, type HttpSubmitExpectation } from '../automation/http-submit';
+import { inspectInvoice } from '../application/job-service';
+import { FUNDING_KINDS } from '../automation/funding-search';
+import { checkInvoiceClaimHttp, claimMessage, listFolderInvoicesHttp, type FolderInvoice, type InvoiceClaim } from '../automation/invoice-claim';
 import { combinePrintPages, fetchPrintPageHttp, listPrintableHttp, printPermissionHttp, PrintError } from '../automation/http-print';
-import { PayeeError, searchSuppliersHttp } from '../automation/http-payee';
-import { handleTravelRoute, TravelApi } from './travel-api';
+import { searchSuppliersHttp } from '../automation/http-payee';
+import { ApplyMoneyApi, type ApplyMoneyJobs } from './apply-money-api';
+import { travelType, TravelApi } from './travel-api';
+import type { FormContext, FormType, PageInvoice } from './form-routes';
+import { OaSession, record } from './oa-session';
 import { randomBytes } from 'node:crypto';
 import { renderPrintPdf } from '../infrastructure/print-pdf';
 
+export { defaultLogin, savedCredentials, type LoginEvidence, type LoginHooks, type PasswordLogin, type SavedCredentials } from './oa-session';
+
 /** A print document served under its token: the HTML page to print, or a PDF to save. */
 export interface PrintFile { body: string | Buffer; type: string; filename?: string }
-import type { Invoice, Stage, WorkerEvent, WorkerRequest } from '../domain/job';
-import { failureByCode, type FailureCode } from '../domain/workflow';
-import fs from 'node:fs';
-import path from 'node:path';
-import { createHash } from 'node:crypto';
 
-export interface LoginHooks {
-  client?: OaHttpClient;
-  /** Called only when CAS asks for a captcha; resolves with the user's answer. */
-  solveCaptcha?: (image: Buffer) => Promise<string>;
-}
-export type PasswordLogin = (username: string, password: string, hooks?: LoginHooks) => Promise<OaHttpClient>;
-
-const CAPTCHA_WAIT_MS = 3 * 60_000;
-const CAPTCHA_ANSWER = /^[A-Za-z0-9]{1,10}$/;
-
-function captchaImage(bytes: Buffer): string {
-  const type = bytes.subarray(0, 3).toString('hex') === 'ffd8ff' ? 'image/jpeg'
-    : bytes.subarray(0, 4).toString('hex') === '89504e47' ? 'image/png' : '';
-  if (!type || bytes.length > 200_000) throw new HttpLoginError('login_page_unrecognized', '验证码图片');
-  return `data:${type};base64,${bytes.toString('base64')}`;
-}
-
-const DOCUMENT_NUMBER = /^A\d{1,32}$/;
-const FUNDING_CODE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
-
-function record(body: unknown): Record<string, unknown> {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppError(400, '请求格式无效。');
-  return body as Record<string, unknown>;
-}
-
-/** Each login runs the full CAS → portal → BPM exchange on the server and replaces
- * any previous school session. The password is used only for that exchange. */
-export const defaultLogin: PasswordLogin = async (username, password, hooks = {}) => {
-  const client = await loginWithPassword({ username, password, ...hooks });
-  await establishBpmSession(client);
-  return client;
-};
-
-export interface LoginEvidence { at: string; userAccount: string; userName: string; savedPassword: boolean; steps: string[] }
-
-export interface SavedCredentials { username: string; password: string }
-
-/** OA_USERNAME / OA_PASSWORD from .env, for test use; the password never leaves the server. */
-export function savedCredentials(env: NodeJS.ProcessEnv = process.env): SavedCredentials | undefined {
-  const username = env.OA_USERNAME?.trim() ?? '', password = env.OA_PASSWORD ?? '';
-  return /^\w{1,32}$/.test(username) && password && password.length <= 128 ? { username, password } : undefined;
-}
-
-/** One school session per local server, held only in memory. */
-export class OaApi {
-  private client?: OaHttpClient;
-  private login?: LoginEvidence;
-  private form?: HttpForm;
-  private direct?: QueryDocument;
-  /** Listed 用款申请单 checked blank; selection is limited to these. */
-  private todos = new Map<string, ApplyMoneyTodo>();
-  /** Every listed 用款申请单, checked one by one through checkForm. */
-  private candidates = new Map<string, ApplyMoneyTodo>();
-  private creating = false;
-  /** Read-only page queries (funds, budgets, blank forms, folders, printing) run on a second BPM
-   * session of the same school login, with a queue of their own, so they never wait for a job that
-   * holds the main session for minutes. `shared` = no second session could be opened. */
-  private reader?: OaHttpClient;
-  private shared = false;
-  private readQueue: Promise<unknown> = Promise.resolve();
-  /** Bills of the last print list: bizId → bill code and print rule ('check' turns 'yes' once OA allows it). */
+/** The page's school login (OaSession) with what every 报销类型 shares: funds, invoice folders, suppliers,
+ * printing. Each 报销类型 is a module of its own (apply-money-api.ts, travel-api.ts) registered in `types`;
+ * a new one is added there, borrowing only the login (FormHost). */
+export class OaApi extends OaSession {
+  /** 用款申请单: blank forms, budgets, the fill and submission as jobs. */
+  readonly applyMoney = new ApplyMoneyApi(this);
   /** 境内差旅单, kept apart from the 用款申请单 jobs; it borrows only this login. */
-  readonly travel = new TravelApi({
-    session: () => this.session(), serial: task => this.serial(task), read: task => this.read(task), reset: () => this.reset(),
-    fail: error => this.fail(error), ownerStatus: (client, billCode, until) => this.ownerStatus(client, billCode, until),
-  });
+  readonly travel = new TravelApi(this);
+  /** Every 报销类型's routes, in the order they are asked. */
+  readonly types: FormType[] = [this.applyMoney.type, travelType(this.travel)];
+  /** Bills of the last print list: bizId → bill code and print rule ('check' turns 'yes' once OA allows it). */
   private printable = new Map<string, { billCode: string; print: 'yes' | 'no' | 'check' }>();
   /** Built print documents, served once each under an unguessable token for 10 minutes. */
   private printed = new Map<string, PrintFile & { expires: number }>();
-  /** A login paused on the CAS captcha; the password stays only in that login's closure. */
-  private captcha?: { client: OaHttpClient; login: Promise<OaHttpClient>; savedPassword: boolean;
-    answer: (text: string) => void; cancel: (error: Error) => void; timer: NodeJS.Timeout };
-  /** BPM answers overlapping requests on one session with "登录超时" (live 2026-10-15),
-   * so every call to it waits for the previous one. */
-  private queue: Promise<unknown> = Promise.resolve();
 
-  private serial<T>(task: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(task, task);
-    this.queue = run.catch(() => undefined);
-    return run;
-  }
-
-  /** A read-only task on the reading session with its 报销单查询 page (ST00 用款申请单 context).
-   * A session OA has dropped is opened again once; without a second session, the main one serves. */
-  private read<T>(task: (client: OaHttpClient, page: QueryDocument) => Promise<T>): Promise<T> {
-    if (this.shared) return this.serial(async () => task(this.session(), await this.readPage(this.session())));
-    const run = async () => {
-      if (!this.reader) {
-        const reader = this.session().fork();
-        try { this.direct = await this.readPage(reader, true); }
-        catch {
-          // The CAS login did not open a second BPM session: fall back to the main one.
-          this.shared = true;
-          return this.serial(async () => task(this.session(), await this.readPage(this.session(), true)));
-        }
-        this.reader = reader;
-      }
-      return task(this.reader, await this.readPage(this.reader));
-    };
-    const job = this.readQueue.then(() => run().catch(error => {
-      if ((error as { code?: string })?.code !== 'authentication' || !this.reader) throw error;
-      this.reader = undefined;
-      this.direct = undefined;
-      return run();
-    }));
-    this.readQueue = job.catch(() => undefined);
-    return job;
-  }
-
-  private async readPage(client: OaHttpClient, fresh = false): Promise<QueryDocument> {
-    if (fresh) this.direct = undefined;
-    this.direct ??= { ...await openOwnerQueryHttp(client), context: { accountBook: 'ST00', reimbursementKind: 'applyMoney' } };
-    return this.direct;
-  }
-
-  constructor(private readonly signInWith: PasswordLogin = defaultLogin,
-    private readonly saved: SavedCredentials | undefined = savedCredentials()) {}
-
-  private session(): OaHttpClient {
-    if (!this.client) throw new AppError(401, '请先登录学校 OA。');
-    return this.client;
-  }
-
-  private reset(): void {
-    this.dropCaptcha();
-    this.client = undefined;
-    this.login = undefined;
-    this.form = undefined;
-    this.direct = undefined;
-    this.reader = undefined;
-    this.shared = false;
-    this.todos.clear();
-    this.candidates.clear();
+  protected onReset(): void {
+    this.applyMoney.reset();
     this.printable.clear();
     this.printed.clear();
   }
 
-  private fail(error: unknown): never {
-    if (error instanceof AppError) throw error;
-    if ((error as { code?: string })?.code === 'authentication') {
-      this.reset();
-      throw new AppError(401, '学校 OA 登录已失效，请重新登录。');
-    }
-    if (error instanceof HttpLoginError || error instanceof CreateReimbursementError || error instanceof OpenReimbursementError
-      || error instanceof ReimbursementListError || error instanceof FundingSearchError || error instanceof BudgetSearchError
-      || error instanceof TaskSearchError || error instanceof InvoiceClaimError || error instanceof PrintError || error instanceof PayeeError) {
-      throw new AppError(error instanceof HttpLoginError && error.code === 'credentials_rejected' ? 401 : 502, error.message);
-    }
-    throw new AppError(502, '学校 OA 请求未完成，请检查校园网络/VPN 后重试。');
-  }
-
   status() {
-    return { loggedIn: Boolean(this.client), login: this.login ?? null, form: this.form ? describeForm(this.form) : null,
-      savedUsername: this.saved?.username ?? null };
+    const form = this.applyMoney?.form;
+    return { loggedIn: Boolean(this.client), login: this.login ?? null, form: form ? { documentNumber: form.documentNumber,
+      accountBook: form.context.accountBook, reimbursementKind: form.context.reimbursementKind } : null, savedUsername: this.saved?.username ?? null };
   }
 
-  private dropCaptcha(): void {
-    if (!this.captcha) return;
-    clearTimeout(this.captcha.timer);
-    this.captcha.cancel(new AppError(409, '登录已取消，请重新登录。'));
-    this.captcha = undefined;
+  /** The job service 用款申请单 runs in. */
+  useJobs(jobs: ApplyMoneyJobs): void {
+    this.applyMoney.useJobs(jobs);
   }
 
-  /** Second half of a login that stopped on the captcha. */
-  private async answerCaptcha(answer: unknown) {
-    const pending = this.captcha;
-    if (!pending) throw new AppError(409, '验证码已失效，请重新点击登录。');
-    if (typeof answer !== 'string' || !CAPTCHA_ANSWER.test(answer.trim())) throw new AppError(400, '请输入图片中的验证码。');
-    clearTimeout(pending.timer);
-    this.captcha = undefined;
-    pending.answer(answer.trim());
-    return this.finishLogin(pending.login, pending.savedPassword);
-  }
+  // 用款申请单's own calls, kept here under their old names for callers of OaApi; the work is ApplyMoneyApi's.
+  forms() { return this.applyMoney.forms(); }
+  checkForm(documentNumber: unknown) { return this.applyMoney.checkForm(documentNumber); }
+  create(body: unknown) { return this.applyMoney.create(body); }
+  select(body: unknown) { return this.applyMoney.select(body); }
+  handoff(documentNumber: unknown) { return this.applyMoney.handoff(documentNumber); }
+  release(documentNumber: string) { this.applyMoney.release(documentNumber); }
+  budgets(params: URLSearchParams) { return this.applyMoney.budgets(params); }
 
-  async refreshCaptcha() {
-    const pending = this.captcha;
-    if (!pending) throw new AppError(409, '验证码已失效，请重新点击登录。');
-    try {
-      const image = await pending.client.request(`${IDS_ORIGIN}/authserver/getCaptcha.htl?${Date.now()}`);
-      return { captcha: { image: captchaImage(image.bytes) } };
-    } catch (error) { this.fail(error); }
-  }
-
-  private async finishLogin(login: Promise<OaHttpClient>, savedPassword: boolean) {
-    try {
-      const client = await login;
-      if (!client.account) throw new HttpLoginError('portal_unverified');
-      this.client = client;
-      this.login = { at: new Date().toISOString(), userAccount: client.account.userAccount, userName: client.account.userName,
-        savedPassword,
-        steps: ['统一身份认证（CAS）接受账号密码并签发登录票据', `门户 getLoginUser 确认账号 ${client.account.userAccount}`,
-          'BPM 报销系统单点登录完成并取得页面令牌'] };
-      return this.status();
-    } catch (error) { this.fail(error); }
-  }
-
-  async signIn(body: unknown) {
-    const input = record(body);
-    if (input.captcha !== undefined) return this.answerCaptcha(input.captcha);
-    const useSaved = input.useSaved === true;
-    if (useSaved && !this.saved) throw new AppError(400, '.env 中没有设置 OA_USERNAME / OA_PASSWORD。');
-    const username = useSaved ? this.saved!.username : input.username;
-    const password = useSaved ? this.saved!.password : input.password;
-    if (typeof username !== 'string' || !/^\w{1,32}$/.test(username.trim()) || typeof password !== 'string'
-      || !password || password.length > 128) throw new AppError(400, '请输入学号/工号和密码。');
-    this.reset();
-    const client = new OaHttpClient();
-    let asked!: (image: Buffer) => void, answer!: (text: string) => void, cancel!: (error: Error) => void;
-    const askedFor = new Promise<Buffer>(resolve => { asked = resolve; });
-    const answered = new Promise<string>((resolve, reject) => { answer = resolve; cancel = reject; });
-    const login = this.signInWith(username.trim(), password, { client, solveCaptcha: image => { asked(image); return answered; } });
-    login.catch(() => undefined);
-    const first = await Promise.race([login.then(() => undefined), askedFor]).catch(error => this.fail(error));
-    if (!first) return this.finishLogin(login, useSaved);
-    let image: string;
-    try { image = captchaImage(first); } catch (error) {
-      cancel(error as Error);
-      this.fail(error);
-    }
-    const timer = setTimeout(() => {
-      if (this.captcha?.login !== login) return;
-      this.captcha = undefined;
-      cancel(new AppError(409, '验证码等待超时，请重新登录。'));
-    }, CAPTCHA_WAIT_MS);
-    timer.unref?.();
-    this.captcha = { client, login, savedPassword: useSaved, answer, cancel, timer };
-    return { ...this.status(), captcha: { image } };
-  }
-
-  signOut() {
-    this.reset();
-    return this.status();
-  }
-
-  /** Todo 用款申请单 from the portal (one quick read); none is usable until checkForm says blank. */
-  async forms() {
-    try {
-      const todos = await this.read(reader => listApplyMoneyTodosHttp(reader));
-      this.candidates = new Map(todos.map(todo => [todo.documentNumber, todo]));
-      this.todos = new Map();
-      return { forms: todos.map(todo => ({ documentNumber: todo.documentNumber, date: todo.date })) };
-    } catch (error) { this.fail(error); }
-  }
-
-  /** One listed form: an empty 报销单查询 row, and nothing in the editor either (an
-   * interrupted fill leaves funding or invoices while that row is still empty). */
-  async checkForm(documentNumber: unknown): Promise<{ documentNumber: string; blank: boolean }> {
-    if (typeof documentNumber !== 'string' || !DOCUMENT_NUMBER.test(documentNumber)) throw new AppError(400, '单据编号格式无效。');
-    const todo = this.candidates.get(documentNumber);
-    if (!todo) throw new AppError(409, '该单据不在当前的用款申请单列表中，请刷新列表。');
-    try {
-      const blank = await this.read(async reader => await isBlankApplyMoneyHttp(reader, todo) && !await this.formContent(reader, todo));
-      if (blank) this.todos.set(documentNumber, todo);
-      else this.todos.delete(documentNumber);
-      return { documentNumber, blank };
-    } catch (error) { this.fail(error); }
-  }
-
-  /** What the editor already holds ('' when nothing): linked invoices or a saved funding item. */
-  private async formContent(client: OaHttpClient, todo: ApplyMoneyTodo): Promise<string> {
-    const form = await openFormHttp(client, todo.target);
-    const linked = await formInvoiceCount(client, form);
-    if (linked) return `已关联 ${linked} 张发票`;
-    const funds = fundingTabs((await client.request(form.url)).text).length;
-    return funds ? `已选过 ${funds} 个经费项目` : '';
-  }
-
-  async create(body: unknown) {
-    if (record(body).confirmed !== true) throw new AppError(400, '新建用款申请单需要明确确认。');
-    const client = this.session();
-    if (this.creating) throw new AppError(409, '正在新建用款申请单，请勿重复提交。');
-    this.creating = true;
-    try {
-      this.form = await this.serial(() => createReimbursementHttp(client, 'applyMoney'));
-      return this.status();
-    } catch (error) { this.fail(error); }
-    finally { this.creating = false; }
-  }
-
-  async select(body: unknown) {
-    const { documentNumber } = record(body);
-    if (typeof documentNumber !== 'string' || !DOCUMENT_NUMBER.test(documentNumber)) throw new AppError(400, '单据编号格式无效。');
-    const todo = this.todos.get(documentNumber);
-    if (!todo) throw new AppError(409, '该单据不在当前可用的用款申请单列表中，请刷新列表。');
-    try {
-      this.form = await this.serial(async () => {
-        if (!await isBlankApplyMoneyHttp(this.session(), todo)) {
-          this.todos.delete(documentNumber);
-          throw new AppError(409, '该用款申请单已经填写了内容，不再是空单，请刷新列表。');
-        }
-        return openFormHttp(this.session(), todo.target);
-      });
-      return this.status();
-    } catch (error) { this.fail(error); }
+  /** LaunchWorker of a live 用款申请单 job (see ApplyMoneyApi.fillJob). */
+  fillJob(request: WorkerRequest, onEvent: (event: WorkerEvent) => void, onExit: () => void, submitWith?: LaunchWorker) {
+    return this.applyMoney.fillJob(request, onEvent, onExit, submitWith);
   }
 
   /** 报销状态 of an invoice number in the account's OA invoice folders (read-only). */
@@ -363,33 +105,34 @@ export class OaApi {
     if (!claim.usable) throw new AppError(409, claim.message);
   }
 
-  /** What a browser run needs to continue this login on the chosen form. A listed form
-   * is re-checked to be still blank; null documentNumber means a new 用款申请单. */
-  async handoff(documentNumber: unknown): Promise<{ target?: FormTarget; storageState: StorageState }> {
-    const client = this.session();
-    if (documentNumber === null) return { storageState: client.jar.toStorageState() };
-    if (typeof documentNumber !== 'string' || !DOCUMENT_NUMBER.test(documentNumber)) throw new AppError(400, '单据编号格式无效。');
-    const todo = this.todos.get(documentNumber);
-    if (!todo) throw new AppError(409, '该单据不在当前可用的用款申请单列表中，请刷新列表。');
-    try {
-      if (!await this.read(reader => isBlankApplyMoneyHttp(reader, todo))) {
-        this.todos.delete(documentNumber);
-        throw new AppError(409, '该用款申请单已经填写了内容，不再是空单，请刷新列表。');
+  /** A page's `invoices` for a form that is not a job: PDFs read here like a job's, folder picks re-read in OA. */
+  async pageInvoices(value: unknown): Promise<PageInvoice[]> {
+    const uploads = value === undefined ? [] : value;
+    if (!Array.isArray(uploads) || uploads.length > MAX_INVOICES) throw new AppError(400, `每张报销单可关联 0–${MAX_INVOICES} 张发票。`);
+    const invoices: PageInvoice[] = [];
+    const picks: Array<{ folderId: string; number: string }> = [];
+    for (const upload of uploads) {
+      const item = object(upload);
+      if (item.folderId !== undefined) {
+        if (typeof item.folderId !== 'string' || !/^\d{1,32}$/.test(item.folderId) || typeof item.number !== 'string' || !/^\d{20}$/.test(item.number)) {
+          throw new AppError(400, '票夹发票参数无效。');
+        }
+        picks.push({ folderId: item.folderId, number: item.number });
+        invoices.push({ fileName: '', number: item.number, folderId: item.folderId });
+      } else {
+        const { invoice, buffer } = await inspectInvoice(upload);
+        if (!invoice.number) throw new AppError(400, '未能从 PDF 识别发票号码，无法核对是否已报销。');
+        invoices.push({ fileName: invoice.name, number: invoice.number, bytes: buffer });
       }
-      const detail = await this.read(reader => this.formContent(reader, todo));
-      if (detail) {
-        this.todos.delete(documentNumber);
-        throw new AppError(409, `该用款申请单${detail}（主表金额仍为空），不是空单；请改选其他单据或在 OA 中处理。`);
+      if (invoices.filter(entry => entry.number === invoices[invoices.length - 1].number).length > 1) {
+        throw new AppError(400, `同一张发票（${invoices[invoices.length - 1].number}）选择了多次。`);
       }
-    } catch (error) {
-      if (error instanceof HttpFillError) throw new AppError(502, error.message);
-      this.fail(error);
     }
-    // Handed to a job: a second submission with this form waits for a refreshed list, so two
-    // queued jobs never both take it before the first one writes to it.
-    this.todos.delete(documentNumber);
-    return { target: { bizId: todo.target.bizId, taskId: todo.target.taskId, documentNumber },
-      storageState: client.jar.toStorageState() };
+    for (const picked of await this.pickedInvoices(picks)) {
+      const entry = invoices.find(item => item.folderId === picked.folderId && item.number === picked.number);
+      if (entry) entry.fileName = picked.name;
+    }
+    return invoices;
   }
 
   /** 报销单查询's newest bills for the print panel, each with OA's print rule. */
@@ -467,166 +210,6 @@ export class OaApi {
     } catch (error) { this.fail(error); }
   }
 
-  /** A handed-off form whose job was not created or not started is selectable again. */
-  release(documentNumber: string): void {
-    const todo = this.candidates.get(documentNumber);
-    if (todo) this.todos.set(documentNumber, todo);
-  }
-
-  /** 报销单查询 status and amount of one bill; `until` polls briefly for a status change. */
-  private async ownerStatus(client: OaHttpClient, billCode: string, until?: string, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))) {
-    for (let attempt = 0; ; attempt++) {
-      const page = await openOwnerQueryHttp(client);
-      const { list } = await searchOwnerHttp(client, page, { billCode });
-      const matches = list.rows.filter(row => row.billCode === billCode);
-      const row = matches.length === 1 ? { status: matches[0].statusText, amount: matches[0].reimbursementAmount } : undefined;
-      if (!until || row?.status === until || attempt >= 2) return row;
-      await sleep(2000);
-    }
-  }
-
-  /** The saved form's submission as the page's own requests, then the 报销单查询 status as
-   * receipt. queryAdvance goes out at most once; an unclear outcome is never retried. */
-  private async submitSaved(client: OaHttpClient, form: HttpForm, expect: HttpSubmitExpectation, onEvent: (event: WorkerEvent) => void) {
-    let phase: Stage = 'prepare submission', advancing = false;
-    const stage = (state: 'started' | 'completed' | 'skipped', evidence?: string) => onEvent({ type: 'stage', stage: phase, state, evidence });
-    const move = (next: Stage) => { if (next !== phase) { stage('completed'); phase = next; } };
-    stage('started', '接口已保存本单，正在用接口回读核对并提交（不启动浏览器）。');
-    let route = '';
-    try {
-      const result = await this.serial(() => submitFormHttp(client, form, expect, {
-        progress: (step, message) => { move(step === 'advance' ? 'confirm submission' : 'prepare submission'); stage('started', message); },
-        validated: summary => { advancing = true; onEvent({ type: 'submission_validated', summary }); },
-      }));
-      route = `；审批路线：${result.route.map(item => `${item.step} ${item.handler}`).join('、')}`;
-      stage('completed', 'OA 已接受提交请求。');
-    } catch (error) {
-      const failure = error instanceof HttpSubmitError ? error : undefined;
-      const detail = failure?.response ? `（${failure.response}）` : '';
-      if (failure?.code === 'authentication' || (error as { code?: string })?.code === 'authentication') {
-        this.reset();
-      } else if (failure ? failure.code === 'unknown' : advancing) {
-        // queryAdvance went out with an unfamiliar reply: only 报销单查询 can tell what happened.
-        stage('skipped', `${failure?.message ?? '接口提交发生异常。'}${detail} 改以“报销单查询”的单据状态为准。`);
-      } else {
-        const sent = failure ? failure.sent : advancing;
-        const row = sent ? await this.serial(() => this.ownerStatus(client, form.documentNumber)).catch(() => undefined) : undefined;
-        const code: FailureCode = sent ? (failure?.code === 'rejected' && row?.status === '预制' ? 'http_submit_rejected' : 'submission_unknown')
-          : failure?.code === 'route_unverified' ? 'submission_route_unverified' : 'http_submit_blocked';
-        stage('skipped', `已停止：${failure?.message ?? '接口提交发生异常。'}${detail}`);
-        onEvent({ type: 'failure', failure: failureByCode(code) });
-        return;
-      }
-      if (!this.client) {
-        stage('skipped', `已停止：${failure?.message ?? '学校 OA 登录已失效。'}`);
-        onEvent({ type: 'failure', failure: failureByCode(advancing ? 'submission_unknown' : 'http_submit_blocked') });
-        return;
-      }
-    }
-    phase = 'verify submission';
-    stage('started', '正在“报销单查询”中核对本单状态。');
-    const row = await this.serial(() => this.ownerStatus(client, form.documentNumber, '提交')).catch(() => undefined);
-    if (row?.status !== '提交' || cents(row.amount) !== cents(expect.amount)) {
-      stage('skipped', `报销单查询显示状态“${row?.status ?? '未读取到'}”，金额 ${row?.amount ?? '—'}。`);
-      onEvent({ type: 'failure', failure: failureByCode('submission_unknown') });
-      return;
-    }
-    stage('completed', `报销单查询显示 ${form.documentNumber} 状态“提交”，金额 ${row.amount} 元${route}。`);
-    onEvent({ type: 'result', result: { documentNumber: form.documentNumber, amount: expect.amount, action: 'submit', verification: 'receipt',
-      receipt: { documentNumber: form.documentNumber, amount: row.amount, status: row.status, verifiedAt: new Date().toISOString(), source: 'oa_owner_list' } } });
-  }
-
-  /** LaunchWorker for a live job from this page: the whole fill runs as the captured BPM
-   * requests on this login, reported with the browser worker's stages. A submit job is
-   * then submitted with the page's requests too (OA_HTTP_SUBMIT=false hands the saved
-   * form to `submitWith`, whose browser re-reads it and clicks 提交). */
-  fillJob(request: WorkerRequest, onEvent: (event: WorkerEvent) => void, onExit: () => void, submitWith?: LaunchWorker) {
-    let stopped = false, created = false;
-    let current: Stage | undefined;
-    let browser: ReturnType<LaunchWorker> | undefined;
-    const stage = (name: Stage, state: 'started' | 'completed' | 'skipped', evidence?: string) =>
-      onEvent({ type: 'stage', stage: name, state, evidence });
-    const run = async () => {
-      const { job } = request;
-      const input = job.input, target = input.target;
-      const httpSubmit = process.env.OA_HTTP_SUBMIT !== 'false';
-      if (!job.invoice?.number || (job.action !== 'save' && !httpSubmit && !(submitWith && request.sessionStateFile))) {
-        throw new HttpFillError('invalid_input');
-      }
-      const invoices = jobInvoices(job).map((invoice, index) => {
-        if (invoice.folderId) return { fileName: invoice.name, number: invoice.number, folderId: invoice.folderId };
-        const bytes = fs.readFileSync(index ? path.join(request.workDir, invoiceFileName(index)) : request.invoicePath);
-        if (createHash('sha256').update(bytes).digest('hex') !== invoice.sha256) throw new HttpFillError('invalid_input');
-        return { fileName: invoice.name, bytes, number: invoice.number };
-      });
-      const client = this.session();
-      stage(target ? 'select reimbursement form' : 'create reimbursement form', 'started');
-      created = !target;
-      const form = await this.serial(() => target ? openFormHttp(client, target) : createReimbursementHttp(client, 'applyMoney'));
-      if (target?.documentNumber && form.documentNumber !== target.documentNumber) throw new HttpFillError('response_invalid');
-      stage(target ? 'select reimbursement form' : 'create reimbursement form', 'completed', `已打开 ${form.documentNumber}（接口方式，不启动浏览器）。`);
-      const stages: Record<FillStep, Stage> = { funding: 'select funding item', upload: 'attach invoice', invoice: 'attach invoice',
-        payment: 'configure payment', save: 'save reimbursement' };
-      const result = await this.serial(() => fillFormHttp(client, form, {
-        fundingKind: input.fundingKindKeyword === '我负责的项目' ? 'responsible' : 'authorized',
-        fundingCode: input.fundingKeyword, budgetName: input.budgetKeyword, amount: input.amount,
-        attachmentCount: input.attachmentCount, purpose: input.purpose, reason: input.reason, payeeCode: input.payeeCode,
-        payeeKind: input.payeeKind, supplierCode: input.supplierCode, remitPurpose: input.remitPurpose,
-        invoices,
-      }, { stopped: () => stopped, progress: (step, message) => {
-        if (stages[step] === current) return onEvent({ type: 'stage', stage: current, state: 'started', evidence: message });
-        if (current) stage(current, 'completed');
-        current = stages[step];
-        stage(current, 'started', message);
-      } }));
-      if (current) stage(current, 'completed');
-      stage('verify saved form', 'completed', `保存回执：报销 ${result.bizData.reimbursementAmount} 元，结算 ${result.bizData.settlementAmount} 元，`
-        + `附件 ${result.bizData.attachmentNumber} 张，收款人 ${result.payeeName}。`);
-      if (job.action === 'submit' && httpSubmit) {
-        if (stopped) throw new HttpFillError('stopped');
-        await this.submitSaved(client, form, { fundingCode: input.fundingKeyword, budgetName: input.budgetKeyword, amount: input.amount,
-          attachmentCount: input.attachmentCount, payeeCode: input.payeeCode, payeeKind: input.payeeKind, supplierCode: input.supplierCode,
-          invoiceNumbers: invoices.map(item => item.number),
-          reason: input.reason, managerId: result.managerId || undefined }, onEvent);
-        return false;
-      }
-      if (job.action === 'submit' && submitWith && request.sessionStateFile) {
-        if (stopped) throw new HttpFillError('stopped');
-        stage('prepare submission', 'started', '接口已保存本单，正在启动浏览器：先逐项回读核对，再点击“提交”和流转确认。');
-        await writeSessionState(client.jar.toStorageState(), request.sessionStateFile);
-        const target = { bizId: form.context.bizId, taskId: form.context.taskId, documentNumber: form.documentNumber };
-        browser = submitWith({ ...request, submitOnly: true, job: { ...job, input: { ...input, formMode: 'target', target } } }, onEvent, onExit);
-        return true;
-      }
-      for (const name of ['prepare submission', 'confirm submission', 'verify submission'] as const) stage(name, 'skipped', '本次仅保存。');
-      onEvent({ type: 'result', result: { documentNumber: form.documentNumber, amount: input.amount, action: 'save', verification: 'unverified' } });
-      return false;
-    };
-    run().then(handedOff => { if (!handedOff) onExit(); }, async error => {
-      // OA also answers a request it refuses with a redirect, which reads as "登录已失效". Only a
-      // session that no longer opens 报销单查询 is really gone; then the whole login is dropped.
-      let refused = false;
-      if ((error as { code?: string })?.code === 'authentication') {
-        const client = this.client;
-        const alive = client ? await this.serial(() => openOwnerQueryHttp(client)).then(() => true, () => false) : false;
-        if (alive) refused = true;
-        else this.reset();
-      }
-      const fill = error instanceof HttpFillError ? error : undefined;
-      const message = refused ? `学校 OA 拒绝了这一步的请求（登录仍然有效），已停止填写。`
-        : fill?.message ?? (error instanceof AppError ? error.message : '接口填写发生异常。');
-      onEvent({ type: 'stage', stage: current ?? 'prepare reimbursement form', state: 'skipped', evidence: `已停止：${message}` });
-      // A fill error knows whether the form was written; a new form it never wrote to stays a blank draft.
-      const partial = fill ? Boolean(fill.partial) : created || current !== undefined;
-      onEvent({ type: 'failure', failure: failureByCode(partial ? 'http_fill_partial' : 'http_fill_rejected') });
-      onExit();
-    });
-    return {
-      stop() { stopped = true; browser?.stop(); },
-      completeManual() { browser?.completeManual?.(); },
-    };
-  }
-
   async funds(params: URLSearchParams) {
     const kind = params.get('kind') || 'authorized';
     if (!Object.hasOwn(FUNDING_KINDS, kind)) throw new AppError(400, '经费类别无效。');
@@ -639,49 +222,29 @@ export class OaApi {
     } catch (error) { this.fail(error); }
   }
 
-  async budgets(params: URLSearchParams) {
-    const fundingCode = params.get('fundingCode') || '';
-    if (!FUNDING_CODE.test(fundingCode)) throw new AppError(400, '经费编号无效。');
-    try {
-      const query = (reader: OaHttpClient, page: QueryDocument) => searchBudgetHttp(reader, page, { fundingItemsCode: fundingCode, pagesize: 100 });
-      // A single "登录超时" can be transient; only a repeated one ends the login.
-      const result = await this.read((reader, page) => query(reader, page).catch(error => {
-        if (error instanceof BudgetSearchError && error.code === 'authentication') return query(reader, page);
-        throw error;
-      }));
-      if (!result.outlays) throw new AppError(502, '预算科目接口返回了无法识别的结构。');
-      return { fundingCode, total: result.outlays.total ?? result.outlays.rows.length,
-        balance: result.outlays.showAmount ?? '',
-        subjects: result.outlays.rows.map(row => ({ code: row.expenditureItemCode, name: row.expenditureItemName,
-          quotaCode: row.quotaCode, quotaName: row.quotaName, balance: row.showAmount })) };
-    } catch (error) { this.fail(error); }
-  }
 }
 
-function describeForm(form: HttpForm) {
-  return { documentNumber: form.documentNumber, accountBook: form.context.accountBook, reimbursementKind: form.context.reimbursementKind };
-}
-
-/** Routes under /api/oa/; the caller has already checked the local session and CSRF token. */
-export async function handleOaRoute(api: OaApi, method: string, url: URL, body: () => Promise<unknown>): Promise<unknown | undefined> {
-  if (url.pathname === '/api/oa/travel' || url.pathname.startsWith('/api/oa/travel/')) return handleTravelRoute(api.travel, method, url);
+/** Routes under /api/oa/: the login and shared queries, then each 报销类型's own; the caller has already
+ * checked the local session and CSRF token. A Created answer is sent with HTTP 201. */
+export async function handleOaRoute(api: OaApi, method: string, url: URL, body: () => Promise<unknown>,
+  context: FormContext): Promise<unknown | undefined> {
   switch (`${method} ${url.pathname}`) {
     case 'GET /api/oa/status': return api.status();
     case 'POST /api/oa/login': return api.signIn(await body());
     case 'POST /api/oa/login/captcha': return api.refreshCaptcha();
     case 'POST /api/oa/logout': return api.signOut();
-    case 'GET /api/oa/forms': return api.forms();
-    case 'GET /api/oa/forms/check': return api.checkForm(url.searchParams.get('documentNumber'));
-    case 'POST /api/oa/forms': return api.create(await body());
     case 'GET /api/oa/payees': return api.payees(url.searchParams.get('name'));
     case 'GET /api/oa/print': return api.printList();
     case 'GET /api/oa/print/permission': return api.printPermission(url.searchParams.get('bizId'));
     case 'POST /api/oa/print': return api.printDocument(await body());
-    case 'POST /api/oa/select': return api.select(await body());
     case 'GET /api/oa/funds': return api.funds(url.searchParams);
-    case 'GET /api/oa/budgets': return api.budgets(url.searchParams);
     case 'GET /api/oa/invoice-claim': return api.invoiceClaim(url.searchParams.get('number'));
     case 'GET /api/oa/folder-invoices': return api.folderInvoices();
-    default: return undefined;
+    default:
+      for (const type of api.types) {
+        const answer = await type.route(method, url, body, context);
+        if (answer !== undefined) return answer;
+      }
+      return undefined;
   }
 }

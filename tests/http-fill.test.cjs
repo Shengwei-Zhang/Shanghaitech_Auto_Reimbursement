@@ -62,7 +62,7 @@ function oa(overrides = {}) {
     const { pathname } = new URL(url);
     const name = pathname.split('/').pop();
     const form = typeof init.body === 'string' && !init.body.startsWith('{') ? new URLSearchParams(init.body) : undefined;
-    const call = { name, url, headers: init.headers, form, raw: init.body };
+    const call = { name, url, method: init.method, headers: init.headers, form, raw: init.body };
     calls.push(call);
     if (overrides[name]) { const reply = await overrides[name](call, state); if (reply) return reply; }
     switch (name) {
@@ -604,4 +604,26 @@ test('the submit readback accepts the 银行汇款 row of the expected supplier 
   await assert.rejects(submitFormHttp(good.client, FORM, { ...EXPECT, payeeKind: 'bank', supplierCode: '1000099999' }), { code: 'form_mismatch', sent: false });
   const result = await submitFormHttp(good.client, FORM, { ...EXPECT, payeeKind: 'bank', supplierCode: '1000014428' });
   assert.ok(result, 'the matching supplier row is submitted');
+});
+
+const { matchGolden } = require('./golden.cjs');
+
+test('请求基准 用款申请单: 个人银行卡, upload, fill and submit send exactly the recorded requests', async () => {
+  const { calls, client } = saved();
+  await fillFormHttp(client, FORM, INPUT, fast);
+  await submitFormHttp(client, FORM, EXPECT);
+  matchGolden('apply-money-card-submit', calls);
+});
+
+test('请求基准 用款申请单: 银行汇款 to an OA supplier', async () => {
+  const run = bankOa();
+  await fillFormHttp(run.client, FORM, BANK_INPUT, fast);
+  matchGolden('apply-money-bank', run.calls);
+});
+
+test('请求基准 用款申请单: an invoice picked from an OA folder', async () => {
+  const row = { ...FOLDER_ROW, invoiceId: 'INV7', invoiceNumber: PICKED, salerName: '某商贸公司', invoiceDate: '2026-09-08 00:00:00' };
+  const { calls, client } = oa(ownFolder([row]));
+  await fillFormHttp(client, FORM, { ...INPUT, invoices: [{ fileName: '旧发票.pdf', number: PICKED, folderId: OWN_FOLDER }] }, fast);
+  matchGolden('apply-money-folder-invoice', calls);
 });

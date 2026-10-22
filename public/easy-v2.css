@@ -321,7 +321,7 @@ main > * { min-width:0; }
 @media (max-width:640px) { #claim[data-type=travel] .hrow-form { grid-template-columns:1fr; } }
 
 /* An amount filled in automatically (the row left empty): the trip total or what is owed, less the other rows. */
-.money-lines input.num.auto { background:var(--lime-soft); border-color:#d8e6a0; color:var(--lime-ink); font-weight:650; }
+.money-lines input.auto, .money-lines input.num.auto { background:var(--lime-soft); border-color:#d8e6a0; color:var(--lime-ink); font-weight:650; }
 
 /* A field a 提交前 problem points at: marked until it is changed; each problem line jumps to it. */
 .field-invalid, .money-lines input.num.auto.field-invalid { border-color:var(--red) !important; background:var(--red-soft) !important;

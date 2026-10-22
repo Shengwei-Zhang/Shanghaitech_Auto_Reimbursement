@@ -37,14 +37,26 @@ flowchart LR
 
 | 层 | 用款申请单 | 境内差旅单 | 新增类型 |
 | --- | --- | --- | --- |
-| OA 请求链（填写、提交） | `src/automation/http-fill.ts`、`http-submit.ts` | `src/automation/travel/`（`request`、`search`、`funding`、`invoices`、`payees`、`fill`、`submit`） | `src/automation/<类型>/`，从已有的一种复制后改 |
-| 服务端 | `src/server/oa-api.ts`（任务队列 `fillJob`） | `src/server/travel-api.ts`（`TravelApi`，经 `TravelHost` 借用登录） | `src/server/<类型>-api.ts`，路由挂在 `/api/oa/<类型>/` 下 |
-| 页面模块 | `public/js/apply-money.js` | `public/js/travel.js`、`itinerary.js` | `public/js/<类型>.js`，在 `core.js` 的表单注册表中 `registerForm(报销类型, {...})` |
-| 测试 | `tests/http-fill.test.cjs`、`easy-oa.test.cjs` | `tests/http-travel.test.cjs`、`itinerary.test.cjs` | 请求链单元测试 + `tests/easy-page.spec.ts` 中一条页面流程 |
+| OA 请求链（填写、提交） | `src/automation/http-fill.ts`、`http-submit.ts` | `src/automation/travel/`（`request`、`search`、`funding`、`invoices`、`payees`、`fill`、`submit`） | `src/automation/<类型>/` |
+| 服务端 | `src/server/apply-money-api.ts`（`ApplyMoneyApi`：空单、预算、作为任务的填写与提交） | `src/server/travel-api.ts`（`TravelApi`，内存中的一次填写） | `src/server/<类型>-api.ts`，路由在 `/api/oa/<类型>` 下 |
+| 页面模块 | `public/js/apply-money.js` | `public/js/travel.js`、`itinerary.js` | `public/js/<类型>.js`，`registerForm(报销类型, {...})` |
+| 测试 | `tests/http-fill.test.cjs`（含请求基准）、`easy-oa.test.cjs` | `tests/http-travel.test.cjs`（含请求基准）、`itinerary.test.cjs` | 请求链测试与请求基准 + `tests/easy-page.spec.ts` 中一条页面流程 |
 
-只有与单据类型无关的部分共用：登录与 HTTP 客户端（`http-login.ts`）、BPM 编码与查询（`http-bpm.ts`：经费、预算、报销单查询、新建/打开单据）、票夹接口（`invoice-claim.ts`）、供应商查询（`http-payee.ts`）、发票限额规则（`domain/invoice-rules.ts`）。页面上共用 `public/js/core.js`（请求、提示、可搜索下拉框、文件读取、表单注册表）、`login.js`、`funding.js`（经费与预算项选择）、`invoices.js`（发票）。共用模块不调用任何一种单据的代码：它们通过注册表询问当前单据（预算查询地址 `budgetsPath`、`onSubjects`、`onInvoices`、`onFund`、`reset`、`submit`），由 `main.js` 统一接线。
+**服务端结构**：`src/server/oa-session.ts` 的 `OaSession` 只管学校登录（含验证码）、写请求排队（`serial`）、只读查询的第二个 BPM 会话（`read`）和“报销单查询”回执（`ownerStatus`），以 `FormHost` 接口借给各报销类型；不含任何报销类型的逻辑。`oa-api.ts` 的 `OaApi` 在其上加各类型共用的查询（经费、票夹、供应商、打印、页面发票 `pageInvoices`），并在 `types` 中登记每种报销类型。每种类型实现 `form-routes.ts` 的 `FormType`（名称 + 自己的路由；创建类请求返回 `Created` 即 HTTP 201），通过 `FormContext` 取得 `liveEnabled` 和 `readInvoices`。`app.ts` 统一挂载 `/api/oa/`，不再为某种类型单独分支；`public/js/` 下的模块自动提供，不必在静态文件表中登记。
 
-页面是浏览器原生 ES 模块（`<script type="module" src="/js/main.js">`），没有构建步骤；`src/server/app.ts` 的静态文件表列出每个模块。页面流程由 `tests/easy-page.spec.ts` 在真实浏览器中验证：所有 `/api` 请求在浏览器内应答，核对页面最终发出的请求体。
+**新增一种报销类型**：
+
+1. 在浏览器中录制该单据的完整操作，整理出请求链（参照 `docs/http-travel.md`）。
+2. `npm run new-form -- <slug> <中文名> <OA reimbursementKind>` 生成四个骨架文件（请求链、服务端、页面模块、测试）。它只新建文件，不改动任何已有文件，生成后该类型**尚未启用**。
+3. 在骨架中实现请求链和页面；为请求链写 OA 接口桩，用 `matchGolden` 记录请求基准（`UPDATE_GOLDEN=1 npm test`），并加一条页面流程测试。
+4. 按生成命令打印的三处启用：`OaApi.types`、`main.js` 的 init 调用、`#claim-type` 的选项。
+5. `npm test` 全部通过（已有类型的请求基准必须不变）后，在 OA 中用小额单据各试一次“只保存”和提交。
+
+**请求基准**（`tests/golden.cjs`、`tests/fixtures/golden/*.json`）：每种类型的典型请求链（用款申请单：个人银行卡填写并提交、银行汇款、票夹发票；境内差旅单：两位出差人与携程冲账填写并提交、多行经费明细与多位收款人、票夹发票）发给 OA 的每个请求，按顺序、地址、请求头和每个字段（双重编码的值已解码，加密的付款查询记录其明文）逐一比对。重构不得改变它们；有意改变发出的请求时，用 `UPDATE_GOLDEN=1 npm test` 重新记录，并在提交前审阅基准文件的差异。页面测试则逐字段核对两种类型提交给本机服务的请求体。GitHub 上每次推送由 `.github/workflows/test.yml` 运行全部测试。
+
+只有与单据类型无关的部分共用：登录与 HTTP 客户端（`http-login.ts`）、BPM 编码与查询（`http-bpm.ts`：经费、预算、报销单查询、新建/打开单据）、票夹接口（`invoice-claim.ts`）、供应商查询（`http-payee.ts`）、发票限额规则（`domain/invoice-rules.ts`）。页面上共用 `public/js/core.js`（请求、提示、问题定位、可搜索下拉框、文件读取、表单注册表）、`login.js`、`funding.js`（经费与预算项选择）、`invoices.js`（发票）。共用模块不调用任何一种单据的代码：它们通过注册表询问当前单据（预算查询地址 `budgetsPath`、`onSubjects`、`onInvoices`、`onFund`、`reset`、`submit`），由 `main.js` 统一接线。
+
+页面是浏览器原生 ES 模块（`<script type="module" src="/js/main.js">`），没有构建步骤。页面流程由 `tests/easy-page.spec.ts` 在真实浏览器中验证：所有 `/api` 请求在浏览器内应答，核对页面最终发出的请求体。
 
 网页不持有长期 API Key，服务端不接受浏览器调试地址或任意网站地址。worker 只继承必要环境白名单，任务配置通过 IPC 传递；旧脚本的环境变量和模块状态限制在单个执行进程内。工作进程不把原始标准输出转存为任务日志，任务主要记录结构化阶段、错误分类和经过限制的核验信息。
 
