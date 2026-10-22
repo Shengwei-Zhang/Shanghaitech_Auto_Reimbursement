@@ -13,14 +13,16 @@ export type ItineraryItem =
   | { type: 'hotel'; file: string; guest: string; arrival: string; departure: string; nights: number; amount: string;
     /** Folios print DD/MM or MM/DD; when both read as dates, the trip decides (see buildItinerary). */
     alternatives?: Array<{ arrival: string; departure: string }> }
-  | { type: 'hotel_invoice' | 'meeting_invoice'; file: string; amount: string; seller: string; date: string }
+  /** 全电发票: 住宿 and 会议/注册费 fill their columns; 机票行程单 is paid with the flight (its order total);
+   * any other (taxi, 退票费 …) goes to 其他. All of them go to OA's 票夹 with the form. */
+  | { type: 'hotel_invoice' | 'meeting_invoice' | 'flight_invoice' | 'other_invoice'; file: string; amount: string; seller: string; date: string }
   | { type: 'document'; file: string; title: string }
   | { type: 'unknown'; file: string; reason: string };
 
 export interface ItineraryLeg {
   startDate: string; startAddress: string; arriveDate: string; arriveAddress: string;
   vehicle: 'aircraft' | 'train'; trafficExpense: string; travelDays: number;
-  hotelExpense: string; meetingAmount: string;
+  hotelExpense: string; meetingAmount: string; otherAmount: string;
   /** Where the leg came from, e.g. "G252 长沙南→上海虹桥 一等座（火车票.pdf）". */
   source: string;
 }
@@ -156,11 +158,13 @@ export function hotelFromText(text: string, file: string): ItineraryItem | undef
     ...(options.length > 1 ? { alternatives: options } : {}) };
 }
 
-/** A 全电发票 for 住宿 or 会议/注册费: its 价税合计 goes to 住宿费 or 会务/注册费. */
+/** A 全电发票 with its 价税合计: 住宿 → 住宿费, 会议/注册费 → 会务/注册费, an airline 行程单 (already paid as the
+ * flight's order total), or any other invoice with a 发票号码 (→ 其他). */
 export function invoiceFromText(text: string, file: string, amount: string | undefined): ItineraryItem | undefined {
   if (!amount || !/发票/.test(text)) return undefined;
   const flat = text.normalize('NFKC').replace(/\s+/g, '');
-  const type = /住宿/.test(flat) ? 'hotel_invoice' : /会议|会务|注册费/.test(flat) ? 'meeting_invoice' : undefined;
+  const type = /航空运输电子客票行程单|电子客票号码/.test(flat) ? 'flight_invoice' : /住宿/.test(flat) ? 'hotel_invoice'
+    : /会议|会务|注册费/.test(flat) ? 'meeting_invoice' : /发票号码[:：]?\d{8,20}/.test(flat) ? 'other_invoice' : undefined;
   if (!type) return undefined;
   const date = flat.match(/开票日期[:：]?(\d{4})年(\d{2})月(\d{2})日/);
   // 销售方 名称; bank and address lines that also contain 名称 are not it.
@@ -200,9 +204,10 @@ export function buildItinerary(items: ItineraryItem[]): Itinerary {
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   const hotels = items.filter((item): item is Extract<ItineraryItem, { type: 'hotel' }> => item.type === 'hotel');
-  type InvoiceItem = Extract<ItineraryItem, { type: 'hotel_invoice' | 'meeting_invoice' }>;
+  type InvoiceItem = Extract<ItineraryItem, { type: 'hotel_invoice' | 'meeting_invoice' | 'other_invoice' }>;
   const hotelInvoices = items.filter((item): item is InvoiceItem => item.type === 'hotel_invoice');
   const meetings = items.filter((item): item is InvoiceItem => item.type === 'meeting_invoice');
+  const others = items.filter((item): item is InvoiceItem => item.type === 'other_invoice');
   const result: ItineraryGroup[] = [];
   let index = 0;
   for (const [passenger, legs] of groups) {
@@ -237,11 +242,16 @@ export function buildItinerary(items: ItineraryItem[]): Itinerary {
       warnings.push(`没有识别到酒店发票，住宿费暂按水单金额 ${money(folio / 100)} 元填写；请以酒店发票金额为准（可把发票加入“发票”或“行程附件”）。`);
     }
     const meetingTotal = index === 0 ? sum(meetings) : 0;
+    const otherTotal = index === 0 ? sum(others) : 0;
+    if (otherTotal) {
+      warnings.push(`${others.map(named).join('、')} 不是车票、机票、住宿或会议发票，${money(otherTotal / 100)} 元已填入第一段的“其他”，请核对是否应报销。`);
+    }
     result.push({ passenger, legs: legs.map((item, at) => ({
       startDate: item.date, startAddress: item.from, arriveDate: item.type === 'flight' ? item.arriveDate : item.date,
       arriveAddress: item.to, vehicle: item.type === 'flight' ? 'aircraft' : 'train',
       trafficExpense: item.type === 'flight' ? item.total : item.fare, travelDays: at === 0 ? days : 0,
       hotelExpense: at === 0 && hotelTotal ? money(hotelTotal / 100) : '', meetingAmount: at === 0 && meetingTotal ? money(meetingTotal / 100) : '',
+      otherAmount: at === 0 && otherTotal ? money(otherTotal / 100) : '',
       source: item.type === 'flight' ? `${item.number} ${item.fromCode}→${item.toCode} ${item.time}，携程订单 ${item.order}（${item.file}）`
         : `${item.number} ${item.fromStation}→${item.toStation} ${item.time} ${item.seat}（${item.file}）`,
     })) });
@@ -261,6 +271,8 @@ const FIELDS: Record<ItineraryItem['type'], { text: string[]; numbers?: string[]
   hotel: { text: ['file', 'guest', 'arrival', 'departure', 'amount'], numbers: ['nights'] },
   hotel_invoice: { text: ['file', 'amount', 'seller', 'date'] },
   meeting_invoice: { text: ['file', 'amount', 'seller', 'date'] },
+  flight_invoice: { text: ['file', 'amount', 'seller', 'date'] },
+  other_invoice: { text: ['file', 'amount', 'seller', 'date'] },
   document: { text: ['file', 'title'] },
   unknown: { text: ['file', 'reason'] },
 };

@@ -135,17 +135,27 @@ test('境内差旅单: its own budget query, a traveller found by name, two line
   await second.locator('input').first().fill('2400');
   await page.locator('#line-rows tr').first().locator('input').nth(1).fill('交通与补贴');
   await second.locator('input').nth(1).fill('会议注册费');
-  await expect(page.locator('#line-total')).toContainText('留空的一行约 1360.00 元');
+  await expect(page.locator('#line-total')).toContainText('自动填入的一行约 1360.00 元');
   await page.locator('#payee-rows tr:first-child input.num').fill('2400');
   await page.click('#payee-add');
   const payee = page.locator('#payee-rows tr').nth(1);
   await payee.locator('input').first().fill('900002');
   await payee.locator('input').first().dispatchEvent('change');
-  await expect(page.locator('#payee-total')).toContainText('留空的一位约 1360.00 元');
+  await expect(page.locator('#payee-total')).toContainText('自动填入的一位约 1360.00 元');
+  // Amount right after the payee; the transfer column only for a 银行汇款.
+  await expect(page.locator('#payee-rows tr:first-child td').nth(1).locator('input.num')).toHaveCount(1);
+  await expect(page.locator('#payee-account-head')).toHaveText('');
   await page.fill('#reason', '教师乙北京出差');
   await page.check('input[name=action][value=save]');
   await page.click('#submit');
   await expect(page.locator('#travel-card')).toBeVisible();
+  // 执行进度 collapses to its latest step and expands again.
+  await expect(page.locator('#travel-toggle')).toHaveText('收起');
+  await page.click('#travel-toggle');
+  await expect(page.locator('#travel-toggle')).toHaveText(/展开全部 \d+ 步/);
+  await expect(page.locator('#travel-card .travel-note')).toBeHidden();
+  await page.click('#travel-toggle');
+  await expect(page.locator('#travel-card .travel-note')).toBeVisible();
 
   const travel = stub.posts.find(post => post.path === '/api/oa/travel')!;
   expect(travel.body).toMatchObject({ confirmed: true, action: 'save', documentNumber: null, invoices: [], input: {
@@ -172,6 +182,16 @@ test('境内差旅单 lines that cannot add up are refused on the page, before a
   await expect(page.locator('#claim-error')).toContainText('请填写启程和到达日期');
   await expect(page.locator('#claim-error')).toContainText('请输入姓名并在 OA 中查找');
   expect(stub.posts.some(post => post.path === '/api/oa/travel')).toBe(false);
+  // Each problem marks its field; the first is focused, and a problem's line jumps to its own field.
+  const nameInput = page.locator('.traveller-head input').first(), lineAmount = page.locator('#line-rows tr:first-child input.num');
+  await expect(nameInput).toHaveClass(/field-invalid/);
+  await expect(nameInput).toBeFocused();
+  await expect(lineAmount).toHaveClass(/field-invalid/);
+  await expect(page.locator('.legs tbody tr').first().locator('input[type=date]').first()).toHaveClass(/field-invalid/);
+  await page.locator('#claim-error .problem-jump', { hasText: '经费明细合计' }).click();
+  await expect(lineAmount).toBeFocused();
+  await lineAmount.fill('1000');
+  await expect(lineAmount).not.toHaveClass(/field-invalid/);
   // Back to 用款申请单: its own fields return and its budget query is used again.
   const budgets = page.waitForRequest(request => /\/api\/oa\/budgets\?/.test(request.url()));
   await page.locator('#claim-type').selectOption('用款申请单');
@@ -181,26 +201,59 @@ test('境内差旅单 lines that cannot add up are refused on the page, before a
   expect(stub.errors).toEqual([]);
 });
 
-test('行程附件: a parsed ticket is previewed, then fills the traveller and the first leg', async ({ page }) => {
+test('票据 in one place: invoices go to 票夹, the rest is parsed only; legs, the 携程借款单 and the amounts fill themselves', async ({ page }) => {
   const stub = await openPage(page);
   const ticket = { type: 'train', file: 'g1.pdf', passenger: '教师乙', number: 'G1', date: '2026-07-05', time: '07:00', from: '上海', to: '北京',
     fromStation: '上海虹桥', toStation: '北京南', fare: '553.00', seat: '二等座', invoiceNumber: '26429165818000000001', refund: false };
+  const flight = { type: 'flight', file: 'order.pdf', order: '1990000000000006', number: 'MU5100', date: '2026-07-07', time: '18:00',
+    arriveDate: '2026-07-07', arriveTime: '20:10', from: '北京', to: '上海', fromCode: 'PEK', toCode: 'SHA', total: '882.00' };
+  const notice = { type: 'document', file: 'notice.docx', title: '关于召开 2026 年度学术会议的通知' };
   const parsed: string[] = [];
-  await page.route('**/api/travel/parse', route => { parsed.push(route.request().postDataJSON().name); return route.fulfill({ json: { items: [ticket] } }); });
-  await page.route('**/api/travel/itinerary', route => route.fulfill({ json: { itinerary: { groups: [{ passenger: '教师乙', legs: [{
-    startDate: '2026-07-05', startAddress: '上海', arriveDate: '2026-07-05', arriveAddress: '北京', vehicle: 'train', trafficExpense: '553.00',
-    travelDays: 1, hotelExpense: '', meetingAmount: '', source: 'G1 上海虹桥→北京南（g1.pdf）' }] }], ctripOrders: [], hotels: [], warnings: [] } } }));
+  await page.route('**/api/travel/parse', route => {
+    const name = route.request().postDataJSON().name;
+    parsed.push(name);
+    return route.fulfill({ json: { items: [name === 'g1.pdf' ? ticket : name === 'order.pdf' ? flight : notice] } });
+  });
+  await page.route('**/api/invoices/split', route => route.fulfill({ json: { skipped: [], parts: [{ name: 'g1.pdf', base64: 'JVBERi0=',
+    invoice: { number: '26429165818000000001', amount: '553.00', seller: '中国国家铁路集团有限公司', date: '2026-07-05' } }] } }));
+  await page.route('**/api/travel/itinerary', route => route.fulfill({ json: { itinerary: { groups: [{ passenger: '教师乙', legs: [
+    { startDate: '2026-07-05', startAddress: '上海', arriveDate: '2026-07-05', arriveAddress: '北京', vehicle: 'train', trafficExpense: '553.00',
+      travelDays: 3, hotelExpense: '', meetingAmount: '', otherAmount: '', source: 'G1 上海虹桥→北京南（g1.pdf）' },
+    { startDate: '2026-07-07', startAddress: '北京', arriveDate: '2026-07-07', arriveAddress: '上海', vehicle: 'aircraft', trafficExpense: '882.00',
+      travelDays: 0, hotelExpense: '', meetingAmount: '', otherAmount: '', source: 'MU5100 PEK→SHA（order.pdf）' }] }],
+    ctripOrders: ['1990000000000006'], reason: notice.title, hotels: [], warnings: [] } } }));
   await page.locator('#claim-type').selectOption('境内差旅单');
-  await page.setInputFiles('#itinerary-files', { name: 'g1.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7 test') });
-  await expect(page.locator('#itinerary-file-rows')).toContainText('G1 上海虹桥→北京南');
-  await expect(page.locator('#itinerary-apply')).toBeEnabled();
-  await page.click('#itinerary-apply');
+  await expect(page.locator('#invoice-legend')).toHaveText('票据（发票与行程附件）');
+  await expect(page.locator('#drop')).toBeHidden();
+  await page.setInputFiles('#itinerary-files', ['g1.pdf', 'order.pdf', 'notice.docx'].map(name =>
+    ({ name, mimeType: name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream', buffer: Buffer.from(`%PDF-1.7 ${name}`) })));
+  // Sorted: the rail ticket is an invoice for 票夹, the order page and the notice are parsed only.
+  const rows = page.locator('#itinerary-file-rows');
+  await expect(rows).toContainText('发票：提交时上传到 OA 票夹（1）');
+  await expect(rows).toContainText('其他票据：只在本机解析，不上传（2）');
+  await expect(rows.locator('tr', { hasText: 'g1.pdf' })).toContainText('上传票夹');
+  await expect(rows.locator('tr', { hasText: 'order.pdf' })).toContainText('仅解析');
+  await expect(page.locator('#invoice-rows')).toContainText('26429165818000000001');
+  // Travellers and legs without a click, the traveller found in OA, the notice as 报销事由.
   const card = page.locator('.traveller').first();
   await expect(card.locator('.traveller-head input').first()).toHaveValue('教师乙');
   await expect(card.locator('.traveller-head select').nth(1)).toHaveValue('900002');
-  await expect(card.locator('.legs tbody tr').first().locator('td').nth(5).locator('input')).toHaveValue('553.00');
-  // The file goes to the local parser once (parsed results are cached) and nowhere else.
-  expect(parsed).toEqual(['g1.pdf']);
+  await expect(card.locator('.legs tbody tr')).toHaveCount(2);
+  await expect(card.locator('.legs tbody tr').nth(1).locator('td').nth(5).locator('input')).toHaveValue('882.00');
+  await expect(page.locator('#reason')).toHaveValue(notice.title);
+  await expect(page.locator('#itinerary-status')).toContainText('选择经费后自动勾选');
+  // The fund's loans are listed: the flight's order is picked, and the payee is owed the trip less it.
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  await expect(page.locator('#ctrip-picked')).toContainText('1990000000000006');
+  await expect(page.locator('#itinerary-status')).toContainText('已勾选携程借款单：订单 1990000000000006');
+  // 553 + 882 交通 + 540 补贴 (教工 180 × 3) = 1975; less the 882 loan = 1093.
+  await expect(page.locator('#line-rows tr:first-child input.num')).toHaveValue('1975.00');
+  await expect(page.locator('#payee-rows tr:first-child input.num')).toHaveValue('1093.00');
+  // Removing the ticket takes its invoice out of 票夹 too.
+  await rows.locator('tr', { hasText: 'g1.pdf' }).getByRole('button', { name: '删除' }).click();
+  await expect(page.locator('#invoice-rows')).not.toContainText('26429165818000000001');
+  // Each file goes to the local parser once (parsed results are cached) and nowhere else.
+  expect(parsed.sort()).toEqual(['g1.pdf', 'notice.docx', 'order.pdf']);
   expect(stub.posts.some(post => post.path === '/api/oa/travel')).toBe(false);
   expect(stub.errors).toEqual([]);
 });
@@ -245,4 +298,73 @@ test('清空重填 keeps the 报销类型: a 境内差旅单 starts over as a �
   await page.locator('#claim-type').selectOption('用款申请单');
   await page.click('#claim-new');
   await expect(page.locator('#claim-type')).toHaveValue('用款申请单');
+});
+
+test('the trip total fills the 经费明细 amount and the amount owed fills the payee, and are still sent as the rest', async ({ page }) => {
+  const stub = await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  const card = page.locator('.traveller').first();
+  await card.locator('.traveller-head input').first().fill('教师乙');
+  await expect(card.locator('.traveller-head select').nth(1)).toHaveValue('900002');
+  const leg = card.locator('.legs tbody tr').first();
+  const cell = (index: number) => leg.locator('td').nth(index).locator('input, select').first();
+  await cell(0).fill('2026-10-19'); await cell(1).fill('上海'); await cell(2).fill('2026-10-20'); await cell(3).fill('北京');
+  await cell(5).fill('1000'); await cell(6).fill('2');
+  // 1000 交通 + 360 补贴 (教工 180 × 2).
+  const line = page.locator('#line-rows tr:first-child input.num'), payee = page.locator('#payee-rows tr:first-child input.num');
+  await expect(line).toHaveValue('1360.00');
+  await expect(line).toHaveClass(/\bauto\b/);
+  await expect(payee).toHaveValue('1360.00');
+  // A second line with its own amount: the automatic one takes the rest.
+  await page.click('#line-add');
+  const second = page.locator('#line-rows tr').nth(1);
+  await second.locator('select').selectOption('02:10');
+  await second.locator('input.num').fill('360');
+  await expect(line).toHaveValue('1000.00');
+  // Typed over, it is manual; cleared, automatic again.
+  await line.fill('900');
+  await expect(line).not.toHaveClass(/\bauto\b/);
+  await line.fill('');
+  await page.locator('#reason').click();
+  await expect(line).toHaveValue('1000.00');
+  await page.locator('#line-rows tr:first-child input').nth(1).fill('交通与补贴');
+  await second.locator('input').nth(1).fill('会议费');
+  await page.fill('#reason', '教师乙北京出差');
+  await page.check('input[name=action][value=save]');
+  await page.click('#submit');
+  await expect(page.locator('#travel-card')).toBeVisible();
+  const travel = stub.posts.find(post => post.path === '/api/oa/travel')!;
+  expect((travel.body as any).input.lines.map((l: any) => l.amount)).toEqual(['', '360']);
+  expect((travel.body as any).input.payees.map((p: any) => p.amount)).toEqual(['']);
+
+  // A 银行汇款 payee (a name, not a 学号/工号) brings the transfer account and purpose, after the amount.
+  await page.click('#payee-add');
+  const bank = page.locator('#payee-rows tr').nth(1);
+  await bank.locator('input').first().fill('某某会务有限公司');
+  await bank.locator('input').first().dispatchEvent('change');
+  await expect(page.locator('#payee-account-head')).toHaveText('银行转账账户与汇款用途');
+  await expect(bank.locator('td').nth(2).locator('select')).toHaveCount(1);
+  await expect(bank.locator('td').nth(2).locator('input')).toHaveAttribute('placeholder', /汇款用途/);
+});
+
+test('差旅天数 only have to add up to the whole trip; any one leg may hold them all', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  const card = page.locator('.traveller').first();
+  await card.locator('button', { hasText: '添加行程' }).click();
+  const legs = card.locator('.legs tbody tr');
+  const cell = (row: number, index: number) => legs.nth(row).locator('td').nth(index).locator('input, select').first();
+  // 10-19 → 10-19, then 10-21 → 10-21: a trip of 3 days, all on the first leg.
+  for (const [row, from, to, a, b] of [[0, '2026-10-19', '2026-10-19', '上海', '北京'], [1, '2026-10-21', '2026-10-21', '北京', '上海']] as const) {
+    await cell(row, 0).fill(from); await cell(row, 1).fill(a); await cell(row, 2).fill(to); await cell(row, 3).fill(b); await cell(row, 5).fill('100');
+  }
+  await cell(0, 6).fill('3'); await cell(1, 6).fill('0');
+  await page.click('#submit');
+  await expect(page.locator('#claim-error')).not.toContainText('差旅天数');
+  await cell(1, 6).fill('1');
+  await page.click('#submit');
+  await expect(page.locator('#claim-error')).toContainText('各段差旅天数合计 4 天，应等于行程总天数 3 天');
+  await expect(cell(0, 6)).toHaveClass(/field-invalid/);
+  await expect(cell(1, 6)).toHaveClass(/field-invalid/);
 });

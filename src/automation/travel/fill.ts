@@ -75,6 +75,9 @@ const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const MONEY = /^(0|[1-9]\d{0,8})(\.\d{1,2})?$/;
 const days = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 const blank = (value: string | undefined) => value === undefined || value.trim() === '';
+/** Calendar days of a traveller's whole trip, first start to last arrival, both counted. */
+export const tripDays = (legs: Pick<TravelLeg, 'startDate' | 'arriveDate'>[]) =>
+  days([...legs.map(leg => leg.startDate)].sort()[0], [...legs.map(leg => leg.arriveDate)].sort().at(-1)!) + 1;
 
 /** Amount cells of one leg in cents, plus its total as OA computes it (totalAmount). */
 export function legAmounts(leg: TravelLeg, dailySubsidy: number) {
@@ -129,15 +132,19 @@ export function validateTravelInput(input: HttpTravelInput): void {
     && (input.invoices ?? []).every(item => /^\d{20}$/.test(item.number)
       && (item.folderId === undefined ? Boolean(item.bytes?.length) : item.bytes === undefined && /^\d{1,32}$/.test(item.folderId)));
   if (!ok) throw new HttpTravelError('invalid_input');
-  // domesticTravelDetail.js / reimbursementBusinessTrip.js: arrival not before start, days at most the
-  // calendar span, actual subsidy not above standard. The daily rate is checked once OA states it.
+  // Arrival not before start; a traveller's 差旅天数 together equal the whole trip, first start to last arrival
+  // (any one leg may hold more days than its own dates, as the 2026-10-21 recording put them all on the first);
+  // actual subsidy not above standard. The daily rate is checked once OA states it.
   for (const traveller of input.travellers) {
     for (const leg of traveller.legs) {
       const span = days(leg.startDate, leg.arriveDate);
-      if (!Number.isFinite(span) || span < 0 || leg.travelDays > span + 1) {
+      if (!Number.isFinite(span) || span < 0) {
         throw new HttpTravelError('leg_invalid', 'detail', `${traveller.name} ${leg.startDate} ${leg.startAddress}→${leg.arriveAddress}`);
       }
     }
+    if (!traveller.legs.length) continue;
+    const total = tripDays(traveller.legs), sum = traveller.legs.reduce((acc, leg) => acc + leg.travelDays, 0);
+    if (sum !== total) throw new HttpTravelError('leg_invalid', 'detail', `${traveller.name} 各段差旅天数合计 ${sum} 天，行程共 ${total} 天`);
   }
 }
 

@@ -21,7 +21,7 @@
 
 行程一行的字段（与弹窗表单相同）：`id`（空）、`travellerSubsidyAmount`（每日补贴，元）、`startDate`、`startAddress`、`arriveDate`、`arriveAddress`、`vehicle`（aircraft / train / car / other）、`vehicle_text`（飞机 / 火车 / 汽车 / 其他）、`trafficExpense`、`travelDays`、`standardSubsidyAmount`（= 每日补贴 × 天数）、`subsidyAmount`（实际补贴，默认等于标准补贴）、`hotelExpense`、`meetingAmount`、`otherAmount`。金额两位小数，未填的可选金额为空串。OA 计算的行合计 = 交通费 + 实际补贴 + 住宿费 + 会务/注册费 + 其他。
 
-页面规则在发出任何请求前检查：到达日期不早于启程日期，差旅天数不超过两日期之间的天数 + 1。实际补贴不得高于标准补贴，这一条要等 OA 返回出差人的每日补贴后才能检查，所以此时经费和出差人已经写入（`partial: true`），对应的那段行程不会保存。
+页面规则在发出任何请求前检查：到达日期不早于启程日期；每位出差人各段差旅天数之和等于行程总天数（首段启程到末段到达，含首尾），单独一段不限（天数可都填在第一段）。实际补贴不得高于标准补贴，这一条要等 OA 返回出差人的每日补贴后才能检查，所以此时经费和出差人已经写入（`partial: true`），对应的那段行程不会保存。
 
 所有只读核对（出差人、携程借款单）都放在第一个写入之前：学号或订单号不对时停止，本单不做任何改动（`partial: false`）。
 
@@ -67,11 +67,11 @@ D209900000037 的抓包显示，差旅单点击“提交”发出的请求与用
 - **发票**：与用款申请单相同，可上传 PDF 或从 OA 票夹选择，0–10 张。合计须不少于付款金额减去补贴（补贴不需要发票。已提交的 D209900000033：付款 3,130，发票合计 2,880，其中补贴不需发票）。上传在写入本单之前，关联在冲借款之后、付款之前。
 - **经费明细与收款人**：两张表，替代用款申请单的“预算项”“收款人”“报销用途”。经费明细每行选预算项、填金额和用途，“＋增加支出项目”加行；收款人每行填学号/工号（个人银行卡）或户名（银行汇款，再选 OA 供应商账户和汇款用途）及金额，“＋增加收款人”加人。各留一行空金额即取剩余，表下实时显示按页面估算的合计是否相符。没有“实报金额”。完成方式可选“只保存”或“保存并提交流转”。
 
-`POST /api/oa/travel`（`{ confirmed, action: 'save' | 'submit', input: { fundingKind, fundingCode, lines: [{ budgetName, amount?, purpose }], payees: [{ kind: 'card' | 'bank', code, supplierCode?, remitPurpose?, amount? }], attachmentCount, reason, explain?, travellers, ctripOrders? }, documentNumber?, invoices? }`，需 `OA_LIVE_ENABLED=true`）检查后开始一次填写，同一时间只运行一张。`GET /api/oa/travel` 返回进度（只在内存中，服务重启后不保留），`POST /api/oa/travel/stop` 在下一步之前停止。也可以用 `tmp/run-travel.cjs` 从 JSON 文件运行。页面代码在 `public/js/travel.js`（出差人、行程、携程、经费明细、收款人）和 `itinerary.js`（行程附件），不与用款申请单的 `apply-money.js` 互相引用。
+`POST /api/oa/travel`（`{ confirmed, action: 'save' | 'submit', input: { fundingKind, fundingCode, lines: [{ budgetName, amount?, purpose }], payees: [{ kind: 'card' | 'bank', code, supplierCode?, remitPurpose?, amount? }], attachmentCount, reason, explain?, travellers, ctripOrders? }, documentNumber?, invoices? }`，需 `OA_LIVE_ENABLED=true`）检查后开始一次填写，同一时间只运行一张。`GET /api/oa/travel` 返回进度（只在内存中，服务重启后不保留），`POST /api/oa/travel/stop` 在下一步之前停止。也可以用 `tmp/run-travel.cjs` 从 JSON 文件运行。页面代码在 `public/js/travel.js`（出差人、行程、携程、经费明细、收款人）和 `itinerary.js`（票据：分类、识别与自动填入），不与用款申请单的 `apply-money.js` 互相引用。
 
 ## 行程附件（`src/domain/itinerary.ts`、`src/infrastructure/itinerary-files.ts`）
 
-页面上差旅单的“发票”之后是“行程附件”：拖入或选择火车票、机票（携程订单页）、酒店水单、会议通知等文件（PDF、Word、PNG/JPEG）。每个文件经 `POST /api/travel/parse`（`{ name, base64 }`，≤ 8 MB）在本机内存中解析，**不写入磁盘、不发给 OA 或任何外部服务**；“发票”中已加入的 PDF 也一并解析（住宿、会务金额计入行程）。`POST /api/travel/itinerary`（`{ items }`，逐字段复核）把解析结果整理成行程，页面先展示预览和需要核对的提示，点击“填入出差人与行程”才写入出差人表格（之后仍可手工修改，保存和提交走原有流程）。
+差旅单的全部票据在页面上同一处（“票据（发票与行程附件）”）：拖入或选择火车票、机票订单（携程订单页）、住宿发票与水单、会议注册发票、会议通知与日程等文件（PDF、Word、PNG/JPEG）。每个文件经 `POST /api/travel/parse`（`{ name, base64 }`，≤ 8 MB）在本机内存中解析，**不写入磁盘、不发给 OA 或任何外部服务**，再自动分成两类：**发票**（铁路电子客票、住宿/会议注册/机票行程单及其他全电发票）随即加入发票列表，提交时上传到 OA 票夹并关联本单，删除票据时一并移出；**其他票据**（携程订单页、水单、通知）只用于整理行程。从 OA 票夹选择的发票也一并解析。`POST /api/travel/itinerary`（`{ items }`，逐字段复核）把解析结果整理成行程，页面随即自动填入出差人与行程（并按姓名在 OA 中查找学号/工号）、以通知标题作报销事由；选定经费后自动勾选与机票订单号相同的携程借款单（每张只自动勾一次，取消后不再勾回）。经费明细与收款人金额随之自动算出（见“金额”）。新增票据时，只要出差人与行程还是上次自动填入的样子就重新填入；手工改过后不再覆盖，需要时点“用票据重新填入出差人与行程”（会先确认）。金额去向：住宿费按住宿发票（无发票时暂用水单），会务/注册费按会议发票，机票按订单实付（机票行程单不重复计入），其他全电发票（如出租车、退票费）计入第一段“其他”并提示核对。
 
 | 附件 | 读取方式 | 得到 |
 |---|---|---|

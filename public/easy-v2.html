@@ -107,8 +107,8 @@
         </fieldset>
 
         <fieldset id="section-invoices">
-          <legend>发票</legend>
-          <div id="drop" class="drop">
+          <legend id="invoice-legend">发票</legend>
+          <div id="drop" class="drop" data-claim="用款申请单">
             <div class="drop-idle">
               <div class="drop-text">
                 <p>把全电发票 PDF 或整个文件夹拖到这里</p>
@@ -123,6 +123,32 @@
             <p class="drop-active">松开以上传发票 PDF</p>
             <input id="invoice" type="file" accept="application/pdf,.pdf" multiple hidden>
             <input id="invoice-folder" type="file" webkitdirectory multiple hidden>
+          </div>
+          <div id="itinerary" data-claim="境内差旅单" hidden>
+            <div id="itinerary-drop" class="drop">
+              <div class="drop-idle">
+                <div class="drop-text">
+                  <p>把这次出差的全部票据拖到这里：火车票、机票订单、住宿发票与水单、会议注册发票、会议通知与日程</p>
+                  <p class="hint small">自动分成两类：<b>发票</b>（火车票、住宿/会议/机票行程单等全电发票）提交时上传到 OA 票夹并关联本单；<b>其他票据</b>（携程机票订单、水单、通知）只在本机解析，不保存、不上传。识别后自动填写出差人与行程、勾选携程借款单、计算报销金额。支持 PDF、Word、PNG/JPEG，扫描件用本机 OCR。</p>
+                </div>
+                <div class="drop-actions">
+                  <button type="button" id="itinerary-pick-files" class="accent">选择文件</button>
+                  <button type="button" id="itinerary-pick-folder">选择文件夹</button>
+                  <button type="button" id="itinerary-pick-oa">从 OA 票夹选择已上传的发票</button>
+                </div>
+              </div>
+              <p class="drop-active">松开以识别票据</p>
+              <input id="itinerary-files" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
+              <input id="itinerary-folder" type="file" webkitdirectory multiple hidden>
+            </div>
+            <div id="itinerary-result" class="itinerary-result" hidden>
+              <div class="table-scroll">
+                <table class="invoices itinerary-files">
+                  <thead><tr><th>票据</th><th>识别为</th><th>内容</th><th>去向</th><th></th></tr></thead>
+                  <tbody id="itinerary-file-rows"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
           <div id="folder-panel" class="folder-panel" hidden>
             <div class="folder-tools">
@@ -146,47 +172,22 @@
           </div>
           <div class="table-scroll">
           <table id="invoice-table" class="invoices" hidden>
+            <caption class="money-title" data-claim="境内差旅单" hidden>上传票夹的发票（提交时上传并关联到本单）</caption>
             <thead><tr><th>#</th><th>来源</th><th>发票号</th><th>销售方 / 开票日期</th><th class="num">票面金额</th><th>OA 状态</th><th></th></tr></thead>
             <tbody id="invoice-rows"></tbody>
             <tfoot><tr><td></td><td colspan="3" id="invoice-count"></td><td class="num" id="invoice-total"></td><td colspan="2"></td></tr></tfoot>
           </table>
           </div>
           <p id="invoice-info" class="hint small"></p>
-        </fieldset>
-
-        <fieldset id="itinerary" data-claim="境内差旅单" hidden>
-          <legend>行程附件</legend>
-          <div id="itinerary-drop" class="drop">
-            <div class="drop-idle">
-              <div class="drop-text">
-                <p>把火车票、机票（携程订单页）、酒店水单、会议通知拖到这里</p>
-                <p class="hint small">只在本机解析成行程，不保存、不上传 OA；“发票”中已加入的 PDF 也会一并解析。支持 PDF、Word、PNG/JPEG，图片和扫描件用本机 OCR 识别。</p>
-              </div>
-              <div class="drop-actions">
-                <button type="button" id="itinerary-pick-files" class="accent">选择文件</button>
-                <button type="button" id="itinerary-pick-folder">选择文件夹</button>
-              </div>
-            </div>
-            <p class="drop-active">松开以解析行程附件</p>
-            <input id="itinerary-files" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
-            <input id="itinerary-folder" type="file" webkitdirectory multiple hidden>
-          </div>
-          <div id="itinerary-result" class="itinerary-result" hidden>
-            <div class="table-scroll">
-              <table class="invoices itinerary-files">
-                <thead><tr><th>附件</th><th>识别为</th><th>内容</th><th></th></tr></thead>
-                <tbody id="itinerary-file-rows"></tbody>
-              </table>
-            </div>
+          <div data-claim="境内差旅单" hidden><div id="itinerary-review" class="itinerary-result" hidden>
             <div id="itinerary-preview"></div>
             <ul id="itinerary-warnings" class="itinerary-warnings"></ul>
+            <p id="itinerary-status" class="hint small"></p>
             <div class="travel-actions">
-              <button type="button" id="itinerary-apply" class="primary" disabled>填入出差人与行程</button>
-              <button type="button" id="itinerary-ctrip" class="add" hidden></button>
-              <button type="button" id="itinerary-invoices" class="add" hidden></button>
-              <button type="button" id="itinerary-clear" class="danger">清空附件</button>
+              <button type="button" id="itinerary-apply" class="add" disabled>用票据重新填入出差人与行程</button>
+              <button type="button" id="itinerary-clear" class="danger">清空票据</button>
             </div>
-          </div>
+          </div></div>
         </fieldset>
 
         <fieldset id="travel" data-claim="境内差旅单" hidden>
@@ -224,7 +225,7 @@
             <p class="money-title">收款人（合计等于差旅合计减去携程冲账）</p>
             <div class="table-scroll">
               <table class="invoices money-lines payees">
-                <thead><tr><th>收款人（学号 / 工号 / 银行转账户名）</th><th>银行转账账户与汇款用途</th><th class="num">金额（元）</th><th></th></tr></thead>
+                <thead><tr><th>收款人（学号 / 工号 / 银行转账户名）</th><th class="num">金额（元）</th><th id="payee-account-head"></th><th></th></tr></thead>
                 <tbody id="payee-rows"></tbody>
               </table>
             </div>
@@ -271,8 +272,11 @@
 
       <section id="travel-card" class="card" hidden>
         <p class="eyebrow">执行进度</p>
-        <h2>境内差旅单 <span id="travel-doc" class="mono"></span> <span id="travel-status" class="badge"></span></h2>
-        <p class="hint small">程序直接调用学校 OA 接口填写并保存这张差旅单；选了“保存并提交流转”时，回读核对无误后再提交，并在“报销单查询”中核对状态。执行期间请不要在 OA 中修改这张单据。</p>
+        <div class="card-head">
+          <h2>境内差旅单 <span id="travel-doc" class="mono"></span> <span id="travel-status" class="badge"></span></h2>
+          <button type="button" id="travel-toggle" class="link" aria-controls="travel-events" aria-expanded="true">收起</button>
+        </div>
+        <p class="hint small travel-note">程序直接调用学校 OA 接口填写并保存这张差旅单；选了“保存并提交流转”时，回读核对无误后再提交，并在“报销单查询”中核对状态。执行期间请不要在 OA 中修改这张单据。</p>
         <ol id="travel-events" class="events"></ol>
         <div class="row"><button id="travel-stop" class="danger" type="button">停止执行</button></div>
       </section>

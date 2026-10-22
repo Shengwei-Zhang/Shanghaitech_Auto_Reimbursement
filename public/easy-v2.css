@@ -109,8 +109,8 @@ main { max-width:1480px; }
 .money-lines th:last-child { width:56px; }
 .money-lines.lines th:nth-child(1) { width:34%; }
 .money-lines.lines th:nth-child(2) { width:150px; }
-.money-lines.payees th:nth-child(1) { width:26%; }
-.money-lines.payees th:nth-child(3) { width:150px; }
+.money-lines.payees th:nth-child(1) { width:32%; }
+.money-lines.payees th:nth-child(2) { width:150px; }
 .money-lines th.num { text-align:right; }
 .money-lines input, .money-lines select { padding:6px 8px; font-size:14px; }
 .money-lines input.num { text-align:right; }
@@ -319,3 +319,25 @@ main > * { min-width:0; }
 @media (max-width:820px) { .type-select { width:100%; font-size:20px; } }
 @media (max-width:1180px) { #claim[data-type=travel] .hrow-form { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); } }
 @media (max-width:640px) { #claim[data-type=travel] .hrow-form { grid-template-columns:1fr; } }
+
+/* An amount filled in automatically (the row left empty): the trip total or what is owed, less the other rows. */
+.money-lines input.num.auto { background:var(--lime-soft); border-color:#d8e6a0; color:var(--lime-ink); font-weight:650; }
+
+/* A field a 提交前 problem points at: marked until it is changed; each problem line jumps to it. */
+.field-invalid, .money-lines input.num.auto.field-invalid { border-color:var(--red) !important; background:var(--red-soft) !important;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+#claim-error .problem-jump { all:unset; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+#claim-error .problem-jump:hover, #claim-error .problem-jump:focus-visible { text-decoration-style:solid; outline:none; }
+
+/* 票据 of a 境内差旅单: the files sorted into 发票 (to OA's 票夹) and the rest (parsed only). */
+.itinerary-files th:nth-child(4) { width:92px; }
+.itinerary-files tr.group th { background:var(--panel-2); color:var(--ink); text-align:left; font-size:12px; font-family:var(--mono); padding:6px 10px; }
+.badge.plain { background:var(--panel-2); color:var(--muted); border-color:var(--line); }
+#invoice-table caption { caption-side:top; text-align:left; padding:10px 0 6px; }
+#itinerary-status:empty { display:none; }
+
+/* 执行进度 of a 境内差旅单: 收起 keeps the title and the latest step only. */
+.card-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+#travel-card.collapsed .travel-note, #travel-card.collapsed #travel-events li:not(:last-child) { display:none; }
+#travel-card.collapsed #travel-events { margin-bottom:4px; }
+#toast { cursor:pointer; }

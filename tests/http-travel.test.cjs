@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
 const { OaHttpClient } = require('../dist/automation/http-login.js');
-const { fillTravelFormHttp, legRow, easySearchRows, selectOptions, submitTravelFormHttp } = require('../dist/automation/travel/index.js');
+const { fillTravelFormHttp, legRow, easySearchRows, selectOptions, submitTravelFormHttp, validateTravelInput } = require('../dist/automation/travel/index.js');
 const { normalizeFormContext } = require('../dist/automation/reimbursement-context.js');
 
 // Shapes from the 2026-10-21 capture of D209900000037 (tmp/travel-capture, not committed).
@@ -20,7 +20,7 @@ const FORM = { url: URL_, csrfToken: CSRF, procTaskId: TASK, documentNumber: 'D2
   context: { bizId: BIZ, taskId: TASK, accountBook: 'ST00', reimbursementKind: 'domesticTravel' } };
 const LEG_OUT = { startDate: '2026-10-19', startAddress: '上海', arriveDate: '2026-10-20', arriveAddress: '北京', vehicle: 'aircraft',
   trafficExpense: '111', travelDays: 2, hotelExpense: '500', meetingAmount: '2400' };
-const LEG_BACK = { startDate: '2026-10-21', startAddress: '北京', arriveDate: '2026-10-21', arriveAddress: '上海', vehicle: 'aircraft',
+const LEG_BACK = { startDate: '2026-10-20', startAddress: '北京', arriveDate: '2026-10-20', arriveAddress: '上海', vehicle: 'aircraft',
   trafficExpense: '1000', travelDays: 0 };
 const INPUT = { fundingKind: 'authorized', fundingCode: '2099F9999-000-01', attachmentCount: 3,
   lines: [{ budgetName: '国内差旅/参会费', purpose: '教师乙北京差旅' }], payees: [{ kind: 'card', code: '900002' }],
@@ -260,6 +260,15 @@ test('a wrong 学号, an unknown 携程 order or a non-travel form stops before 
     await assert.rejects(fillTravelFormHttp(client, form, input), error => error.code === code && error.partial === false);
     assert.deepEqual(writes(calls), []);
   }
+});
+
+test('差旅天数 are checked for the whole trip, not leg by leg', () => {
+  const traveller = INPUT.travellers[0];
+  // All days on the first leg, which alone spans one day: fine while the trip (10-19 → 10-21) has 3.
+  const spread = [{ ...LEG_OUT, arriveDate: '2026-10-19', travelDays: 3 }, { ...LEG_BACK, startDate: '2026-10-21', arriveDate: '2026-10-21' }];
+  assert.doesNotThrow(() => validateTravelInput({ ...INPUT, travellers: [{ ...traveller, legs: spread }] }));
+  assert.throws(() => validateTravelInput({ ...INPUT, travellers: [{ ...traveller, legs: [spread[0], { ...spread[1], travelDays: 1 }] }] }),
+    error => error.code === 'leg_invalid' && /合计 4 天，行程共 3 天/.test(error.message));
 });
 
 test('legs breaking the page rules are refused: days beyond the dates before any request, subsidy above standard before the leg', async () => {

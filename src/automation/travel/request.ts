@@ -65,7 +65,7 @@ const errors = {
   traveller_kind_missing: '出差人类别中没有唯一的该选项。',
   person_missing: '按学号/工号和姓名没有查到唯一的出差人。',
   traveller_rejected: 'OA 未确认出差人保存，或回读的出差人与任务不一致。',
-  leg_invalid: '行程不符合 OA 规则：到达日期早于启程日期、差旅天数多于行程天数，或实际补贴高于标准补贴。',
+  leg_invalid: '行程不符合 OA 规则：到达日期早于启程日期、各段差旅天数之和不等于行程总天数（首段启程到末段到达），或实际补贴高于标准补贴。',
   vehicle_missing: '交通工具中没有该选项。',
   detail_rejected: 'OA 未确认行程保存，或回读的行程合计与任务不一致。',
   borrow_missing: '携程借款单中没有唯一的该订单号，或其未清余额不大于 0。',

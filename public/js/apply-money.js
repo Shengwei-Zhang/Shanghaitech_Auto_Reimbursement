@@ -181,11 +181,11 @@ function collect() {
   const action = document.querySelector('input[name="action"]:checked')?.value;
   const amount = $('amount').value.trim(), purpose = $('purpose').value.trim(), payee = $('payee').value.trim();
   const attachments = Number($('attachments').value);
-  if (!fund) problems.push('请选择经费。');
+  if (!fund) problems.push({ text: '请选择经费。', field: 'fund-select' });
   else if (state.funds.some(item => item !== fund && `${item.label} ${item.code}`.includes(fund.code))) {
-    problems.push('所选经费编号同时出现在其他经费中，程序无法唯一定位，请改为在 OA 中手工选择。');
+    problems.push({ text: '所选经费编号同时出现在其他经费中，程序无法唯一定位，请改为在 OA 中手工选择。', field: 'fund-select' });
   }
-  if (!subject) problems.push('请选择预算项。');
+  if (!subject) problems.push({ text: '请选择预算项。', field: 'subject-select' });
   else if (state.subjects.some(item => item !== subject && `${item.name} ${item.quotaName}`.includes(subject.name))) {
     problems.push(`预算项名称“${subject.name}”不唯一，程序无法唯一定位，请改为在 OA 中手工选择。`);
   }
@@ -193,22 +193,22 @@ function collect() {
   if (!state.invoices.length) problems.push('请添加全电发票 PDF，或从 OA 票夹选择发票。');
   else if (state.invoices.some(item => assessed.get(item).status === 'checking')) problems.push('还有发票正在核对，请稍候。');
   else if (state.invoices.some(item => assessed.get(item).status !== 'ok')) problems.push('请先删除或重试列表中标红的发票。');
-  if (!/^(0|[1-9]\d{0,8})(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) problems.push('实报金额须为正数，最多两位小数。');
+  if (!/^(0|[1-9]\d{0,8})(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) problems.push({ text: '实报金额须为正数，最多两位小数。', field: 'amount' });
   else {
     const wanted = cents(amount), total = invoiceTotal();
-    if (total !== null && wanted > total) problems.push(`实报金额不能超过发票金额合计（${(total / 100).toFixed(2)} 元）。`);
-    else if (subject && cents(subject.balance) !== null && wanted > cents(subject.balance)) problems.push(`实报金额超过预算项可用余额（${subject.balance} 元）。`);
-    else if (fund && cents(state.fundBalance) !== null && wanted > cents(state.fundBalance)) problems.push(`实报金额超过经费可用余额（${state.fundBalance} 元）。`);
+    if (total !== null && wanted > total) problems.push({ text: `实报金额不能超过发票金额合计（${(total / 100).toFixed(2)} 元）。`, field: 'amount' });
+    else if (subject && cents(subject.balance) !== null && wanted > cents(subject.balance)) problems.push({ text: `实报金额超过预算项可用余额（${subject.balance} 元）。`, field: 'amount' });
+    else if (fund && cents(state.fundBalance) !== null && wanted > cents(state.fundBalance)) problems.push({ text: `实报金额超过经费可用余额（${state.fundBalance} 元）。`, field: 'amount' });
   }
-  if (!Number.isInteger(attachments) || attachments < 1 || attachments > 100) problems.push('附件张数应为 1–100 的整数。');
+  if (!Number.isInteger(attachments) || attachments < 1 || attachments > 100) problems.push({ text: '附件张数应为 1–100 的整数。', field: 'attachments' });
   const kind = payeeKind();
-  if (!kind) problems.push('请填写收款人学号、工号或银行转账户名。');
+  if (!kind) problems.push({ text: '请填写收款人学号、工号或银行转账户名。', field: 'payee' });
   else if (kind === 'bank') {
-    if (payee.length < 2) problems.push('银行转账户名至少 2 个字符。');
-    else if (!$('bank-supplier').value) problems.push('请为银行转账选择 OA 供应商中的收款账户。');
-    if (!$('remit-purpose').value.trim()) problems.push('请填写银行转账的汇款用途。');
+    if (payee.length < 2) problems.push({ text: '银行转账户名至少 2 个字符。', field: 'payee' });
+    else if (!$('bank-supplier').value) problems.push({ text: '请为银行转账选择 OA 供应商中的收款账户。', field: 'bank-supplier' });
+    if (!$('remit-purpose').value.trim()) problems.push({ text: '请填写银行转账的汇款用途。', field: 'remit-purpose' });
   }
-  if (!purpose) problems.push('请填写报销用途。');
+  if (!purpose) problems.push({ text: '请填写报销用途。', field: 'purpose' });
   if (!action) problems.push('请选择完成方式。');
   if (problems.length) return { problems };
   const documentNumber = $('form-select').value === NEW_FORM ? null : $('form-select').value;
@@ -221,11 +221,7 @@ function collect() {
 async function submit() {
   $('claim-error').hidden = true;
   const claim = collect();
-  if (claim.problems) {
-    $('claim-error').textContent = claim.problems.join('\n');
-    $('claim-error').hidden = false;
-    return;
-  }
+  if (claim.problems) return showProblems(claim.problems);
   const { payload, fund, subject } = claim;
   const summary = [
     `类型：${payload.input.reimbursementType}`,
@@ -361,7 +357,7 @@ function updateJob(job) {
   if (ended) {
     const [label] = STATUS[job.status] || [job.status];
     const number = jobDocument(job);
-    toast(`${number ? `单据 ${number}` : '任务'}：${label}。`, ['failed', 'interrupted', 'cancelled', 'needs_review'].includes(job.status), true);
+    toast(`${number ? `单据 ${number}` : '任务'}：${label}。`, ['failed', 'interrupted', 'cancelled', 'needs_review'].includes(job.status));
     refreshBudgets();
   }
   renderJobs();

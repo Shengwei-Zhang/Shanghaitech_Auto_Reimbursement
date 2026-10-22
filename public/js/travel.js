@@ -1,5 +1,5 @@
 /** 境内差旅单: drafts, travellers and legs, 携程 write-offs, 经费明细, 收款人, the run's progress. */
-import { $, balanceText, api, busy, cents, forms, leave, NEW_FORM, option, pending, PERSON_CODE, registerForm, rowButton, searchable, show, state, toast, yuan } from './core.js';
+import { $, balanceText, api, busy, cents, forms, leave, NEW_FORM, option, pending, PERSON_CODE, registerForm, rowButton, searchable, show, showProblems, state, toast, yuan } from './core.js';
 import { refreshBudgets, subjectKey } from './funding.js';
 import { assessInvoices, invoiceTotal, renderInvoices } from './invoices.js';
 
@@ -62,9 +62,16 @@ function resetTravel() {
   renderTravellers();
 }
 
+/** The input of each traveller, leg, line and payee field, so a problem can point at it: fieldOf(leg, 'travelDays'). */
+const fields = new WeakMap();
+const keep = (row, key, element) => { if (!fields.has(row)) fields.set(row, {}); fields.get(row)[key] = element; return element; };
+const fieldOf = (row, key) => fields.get(row)?.[key];
+/** A problem for showProblems, with the field(s) to fix. */
+const at = (text, ...field) => ({ text, field });
+
 function travelInputCell(leg, key, attrs = {}, onInput) {
   const td = document.createElement('td');
-  const input = document.createElement('input');
+  const input = keep(leg, key, document.createElement('input'));
   Object.assign(input, attrs);
   input.value = leg[key];
   input.addEventListener('input', () => { leg[key] = input.value; onInput?.(); showTravelTotal(); });
@@ -122,6 +129,7 @@ function renderTravellers() {
       if (match) { traveller.name = match.name; name.value = match.name; }
     });
     paint();
+    keep(traveller, 'name', name); keep(traveller, 'code', pick);
     head.append(field('类别', kind), field('补贴标准', rate), field('姓名', name), field('学号 / 工号', pick), note,
       rowButton('删除出差人', () => { state.travellers.splice(index, 1); if (!state.travellers.length) state.travellers.push(blankTraveller()); renderTravellers(); }, 'danger'));
     const scroll = document.createElement('div');
@@ -210,6 +218,8 @@ async function loadBorrows() {
     if (seq !== borrowSeq) return;
     state.ctrip.borrows = borrows;
     paintBorrows();
+    // The 票据 module picks the loans of the flights it read.
+    document.dispatchEvent(new CustomEvent('ctrip-borrows'));
   } catch (error) {
     if (seq !== borrowSeq) return;
     if (error.status === 401) return leave('学校 OA 登录已失效，请重新登录。');
@@ -297,6 +307,33 @@ function split(rows, total) {
   return { sum, blanks, rest, ok: Number.isFinite(sum) && blanks <= 1 && (blanks ? rest > 0 : rest === 0) };
 }
 
+/** An amount the user types; left empty, it is the row paintAuto fills in. */
+function autoAmountInput(row, placeholder) {
+  const input = Object.assign(document.createElement('input'), { className: 'num', inputMode: 'decimal', value: row.amount, placeholder });
+  input.addEventListener('input', () => { row.amount = input.value; showMoneyTotals(); });
+  // An automatic amount is selected on focus, so typing replaces it.
+  input.addEventListener('focus', () => { if (!String(row.amount).trim()) input.select(); });
+  input.addEventListener('blur', showMoneyTotals);
+  return keep(row, 'amount', input);
+}
+
+/** The one row left empty shows what it takes: `total` less the other rows. Its amount stays '' and is sent so,
+ * so the run takes the rest of OA's own total (this one is the page's estimate); typing a value makes it manual. */
+function paintAuto(rows, total) {
+  const typed = row => String(row.amount).trim();
+  const blanks = rows.filter(row => !typed(row));
+  const rest = total - rows.reduce((sum, row) => sum + (typed(row) ? cents(typed(row)) ?? 0 : 0), 0);
+  for (const row of rows) {
+    const input = fieldOf(row, 'amount');
+    // The field being edited is left alone; it is painted again on blur.
+    if (!input || document.activeElement === input || typed(row)) { input?.classList.remove('auto'); continue; }
+    const auto = blanks.length === 1 && rest > 0;
+    input.classList.toggle('auto', auto);
+    input.value = auto ? yuanOf(rest) : '';
+    input.title = auto ? '自动填入：按页面估算的金额，保存时以 OA 算出的差旅合计为准；输入金额即改为手填，清空恢复自动' : '';
+  }
+}
+
 function renderLines() {
   if (!$('line-rows')) return;
   const subjects = state.subjects ?? [];
@@ -315,11 +352,11 @@ function renderLines() {
     if (!select.value) line.subject = '';
     select.disabled = !subjects.length;
     select.addEventListener('change', () => { line.subject = select.value; renderLines(); });
-    const amount = Object.assign(document.createElement('input'), { className: 'num', inputMode: 'decimal', value: line.amount,
-      placeholder: state.lines.length > 1 ? '留空 = 剩余' : '留空 = 差旅合计' });
-    amount.addEventListener('input', () => { line.amount = amount.value; showMoneyTotals(); });
+    keep(line, 'subject', select);
+    const amount = autoAmountInput(line, state.lines.length > 1 ? '留空 = 剩余' : '留空 = 差旅合计');
     const purpose = Object.assign(document.createElement('input'), { maxLength: 200, value: line.purpose, placeholder: '例如：参加 2026 中国图像图形大会' });
     purpose.addEventListener('input', () => { line.purpose = purpose.value; });
+    keep(line, 'purpose', purpose);
     const actions = document.createElement('td');
     actions.className = 'actions';
     if (state.lines.length > 1) actions.append(rowButton('删除', () => { state.lines.splice(index, 1); renderLines(); }, 'danger'));
@@ -366,12 +403,17 @@ function renderPayees() {
       if (payeeIsCard(payee)) { payee.suppliers = null; payee.supplierCode = ''; renderPayees(); } else lookupSuppliers(payee);
     });
     code.addEventListener('input', () => { payee.code = code.value; });
+    keep(payee, 'code', code);
+    const who = document.createElement('div');
+    who.className = 'stack';
+    who.append(code);
+    if (payee.code.trim() && payeeIsCard(payee)) {
+      who.append(Object.assign(document.createElement('span'), { className: 'note', textContent: '个人银行卡：保存时按学号/工号在 OA 中查询姓名和卡号。' }));
+    }
+    // The transfer account and purpose only for a 银行汇款 (a name that is not a 学号/工号), at the right.
     const account = document.createElement('div');
     account.className = 'stack';
-    if (!payee.code.trim()) account.append(Object.assign(document.createElement('span'), { className: 'note', textContent: '先填写收款人' }));
-    else if (payeeIsCard(payee)) {
-      account.append(Object.assign(document.createElement('span'), { className: 'note', textContent: '个人银行卡：保存时按学号/工号在 OA 中查询姓名和卡号。' }));
-    } else {
+    if (payee.code.trim() && !payeeIsCard(payee)) {
       const select = document.createElement('select');
       const list = payee.suppliers;
       if (Array.isArray(list) && list.length) {
@@ -383,19 +425,20 @@ function renderPayees() {
       else select.append(option('', list || '户名至少 2 个字符'));
       select.disabled = !Array.isArray(list) || !list.length;
       select.addEventListener('change', () => { payee.supplierCode = select.value; });
+      keep(payee, 'supplierCode', select);
       const purpose = Object.assign(document.createElement('input'), { maxLength: 100, value: payee.remitPurpose, placeholder: '汇款用途，例如：会议注册费' });
       purpose.addEventListener('input', () => { payee.remitPurpose = purpose.value; });
+      keep(payee, 'remitPurpose', purpose);
       account.append(select, purpose);
     }
-    const amount = Object.assign(document.createElement('input'), { className: 'num', inputMode: 'decimal', value: payee.amount,
-      placeholder: state.payees.length > 1 ? '留空 = 剩余' : '留空 = 应付全额' });
-    amount.addEventListener('input', () => { payee.amount = amount.value; showMoneyTotals(); });
+    const amount = autoAmountInput(payee, state.payees.length > 1 ? '留空 = 剩余' : '留空 = 应付全额');
     const actions = document.createElement('td');
     actions.className = 'actions';
     if (state.payees.length > 1) actions.append(rowButton('删除', () => { state.payees.splice(index, 1); renderPayees(); }, 'danger'));
-    tr.append(...[code, account, amount].map(element => { const td = document.createElement('td'); td.append(element); return td; }), actions);
+    tr.append(...[who, amount, account].map(element => { const td = document.createElement('td'); td.append(element); return td; }), actions);
     return tr;
   }));
+  $('payee-account-head').textContent = state.payees.some(payee => payee.code.trim() && !payeeIsCard(payee)) ? '银行转账账户与汇款用途' : '';
   $('payee-add').disabled = state.payees.length >= 10;
   showMoneyTotals();
 }
@@ -405,13 +448,15 @@ function showMoneyTotals() {
   if (!$('line-total') || !state.lines || !state.payees) return;
   const { trip, payment, reverse } = travelEstimate();
   const lines = split(state.lines, trip), payees = split(state.payees, payment);
+  paintAuto(state.lines, trip);
+  paintAuto(state.payees, payment);
   const say = (element, text, ok) => { element.textContent = text; element.className = `hint small${ok ? '' : ' error'}`; };
   say($('line-total'), `经费明细合计须等于差旅合计（约 ${yuanOf(trip)} 元）。`
-    + (lines.blanks ? `已填 ${yuanOf(lines.sum)} 元，留空的一行约 ${yuanOf(lines.rest)} 元（以 OA 算出的差旅合计为准）。`
+    + (lines.blanks ? `已填 ${yuanOf(lines.sum)} 元，自动填入的一行约 ${yuanOf(lines.rest)} 元（以 OA 算出的差旅合计为准）。`
       : `已填 ${yuanOf(lines.sum)} 元${lines.ok ? '。' : `，相差 ${yuanOf(Math.abs(lines.rest))} 元；可把其中一行留空，自动取剩余。`}`)
     + (lines.blanks > 1 ? '只能有一行留空。' : ''), lines.ok || !trip);
   say($('payee-total'), `收款人合计须等于差旅合计减去携程冲账（约 ${yuanOf(payment)} 元${reverse ? `，已冲账 ${yuanOf(reverse)} 元` : ''}）。`
-    + (payees.blanks ? `已填 ${yuanOf(payees.sum)} 元，留空的一位约 ${yuanOf(Math.max(0, payees.rest))} 元。`
+    + (payees.blanks ? `已填 ${yuanOf(payees.sum)} 元，自动填入的一位约 ${yuanOf(Math.max(0, payees.rest))} 元。`
       : `已填 ${yuanOf(payees.sum)} 元${payees.ok ? '。' : `，相差 ${yuanOf(Math.abs(payees.rest))} 元。`}`)
     + (payees.blanks > 1 ? '只能有一位留空。' : ''), payees.ok || !trip || (payees.blanks === 1 && payees.rest === 0));
 }
@@ -422,82 +467,98 @@ function collectMoney(problems) {
   const lines = state.lines.map((line, index) => {
     const subject = subjects.find(item => subjectKey(item) === line.subject);
     const where = `经费明细第 ${index + 1} 行`;
-    if (!subject) problems.push(`${where}：请选择预算项。`);
-    else if (subjects.some(item => item !== subject && item.name === subject.name)) problems.push(`${where}：预算项名称“${subject.name}”不唯一，程序无法唯一定位。`);
-    if (String(line.amount).trim() && (!MONEY.test(String(line.amount).trim()) || !(cents(String(line.amount).trim()) > 0))) problems.push(`${where}：金额须为正数，最多两位小数。`);
-    else if (subject && cents(subject.balance) !== null && cents(String(line.amount).trim()) > cents(subject.balance)) problems.push(`${where}：金额超过预算项可用余额 ${subject.balance} 元。`);
-    if (!line.purpose.trim()) problems.push(`${where}：请填写用途。`);
+    if (!subject) problems.push(at(`${where}：请选择预算项。`, fieldOf(line, 'subject')));
+    else if (subjects.some(item => item !== subject && item.name === subject.name)) problems.push(at(`${where}：预算项名称“${subject.name}”不唯一，程序无法唯一定位。`, fieldOf(line, 'subject')));
+    if (String(line.amount).trim() && (!MONEY.test(String(line.amount).trim()) || !(cents(String(line.amount).trim()) > 0))) problems.push(at(`${where}：金额须为正数，最多两位小数。`, fieldOf(line, 'amount')));
+    else if (subject && cents(subject.balance) !== null && cents(String(line.amount).trim()) > cents(subject.balance)) problems.push(at(`${where}：金额超过预算项可用余额 ${subject.balance} 元。`, fieldOf(line, 'amount')));
+    if (!line.purpose.trim()) problems.push(at(`${where}：请填写用途。`, fieldOf(line, 'purpose')));
     return { budgetName: subject?.name ?? '', amount: String(line.amount).trim(), purpose: line.purpose.trim() };
   });
   const { trip, payment } = travelEstimate();
   const lineSplit = split(state.lines, trip), payeeSplit = split(state.payees, payment);
-  if (lineSplit.blanks > 1) problems.push('经费明细只能有一行金额留空（取剩余）。');
-  else if (trip && !lineSplit.ok) problems.push(`经费明细合计须等于差旅合计（约 ${yuanOf(trip)} 元）；可把其中一行金额留空，自动取剩余。`);
+  const lineAmounts = state.lines.map(line => fieldOf(line, 'amount'));
+  if (lineSplit.blanks > 1) problems.push(at('经费明细只能有一行金额留空（取剩余）。', ...lineAmounts));
+  else if (trip && !lineSplit.ok) problems.push(at(`经费明细合计须等于差旅合计（约 ${yuanOf(trip)} 元）；可把其中一行金额留空，自动取剩余。`, ...lineAmounts));
   const payees = state.payees.filter(payee => payee.code.trim() || String(payee.amount).trim()).map((payee, index) => {
     const where = `收款人第 ${index + 1} 位`;
-    if (!payee.code.trim()) problems.push(`${where}：请填写学号、工号或银行转账户名。`);
+    if (!payee.code.trim()) problems.push(at(`${where}：请填写学号、工号或银行转账户名。`, fieldOf(payee, 'code')));
     else if (!payeeIsCard(payee)) {
-      if (payee.code.trim().length < 2) problems.push(`${where}：银行转账户名至少 2 个字符。`);
-      else if (!payee.supplierCode) problems.push(`${where}：请选择 OA 供应商中的收款账户。`);
-      if (!payee.remitPurpose.trim()) problems.push(`${where}：请填写汇款用途。`);
+      if (payee.code.trim().length < 2) problems.push(at(`${where}：银行转账户名至少 2 个字符。`, fieldOf(payee, 'code')));
+      else if (!payee.supplierCode) problems.push(at(`${where}：请选择 OA 供应商中的收款账户。`, fieldOf(payee, 'supplierCode')));
+      if (!payee.remitPurpose.trim()) problems.push(at(`${where}：请填写汇款用途。`, fieldOf(payee, 'remitPurpose')));
     }
-    if (String(payee.amount).trim() && (!MONEY.test(String(payee.amount).trim()) || !(cents(String(payee.amount).trim()) > 0))) problems.push(`${where}：金额须为正数，最多两位小数。`);
+    if (String(payee.amount).trim() && (!MONEY.test(String(payee.amount).trim()) || !(cents(String(payee.amount).trim()) > 0))) problems.push(at(`${where}：金额须为正数，最多两位小数。`, fieldOf(payee, 'amount')));
     return payeeIsCard(payee) ? { kind: 'card', code: payee.code.trim(), amount: String(payee.amount).trim() }
       : { kind: 'bank', code: payee.code.trim(), supplierCode: payee.supplierCode, remitPurpose: payee.remitPurpose.trim(), amount: String(payee.amount).trim() };
   });
-  if (payeeSplit.blanks > 1) problems.push('收款人只能有一位金额留空（取剩余）。');
-  else if (payment && !payees.length) problems.push('请填写收款人。');
+  const payeeAmounts = state.payees.map(payee => fieldOf(payee, 'amount'));
+  if (payeeSplit.blanks > 1) problems.push(at('收款人只能有一位金额留空（取剩余）。', ...payeeAmounts));
+  else if (payment && !payees.length) problems.push(at('请填写收款人。', fieldOf(state.payees[0], 'code')));
   else if (payment && !(payeeSplit.ok || (payeeSplit.blanks === 1 && payeeSplit.rest === 0))) {
-    problems.push(`收款人合计须等于差旅合计减去携程冲账（约 ${yuanOf(payment)} 元）；可把其中一位金额留空，自动取剩余。`);
+    problems.push(at(`收款人合计须等于差旅合计减去携程冲账（约 ${yuanOf(payment)} 元）；可把其中一位金额留空，自动取剩余。`, ...payeeAmounts));
   }
-  if (new Set(payees.map(payee => `${payee.kind}|${payee.code}|${payee.supplierCode ?? ''}`)).size !== payees.length) problems.push('收款人有重复。');
+  if (new Set(payees.map(payee => `${payee.kind}|${payee.code}|${payee.supplierCode ?? ''}`)).size !== payees.length) problems.push(at('收款人有重复。', ...state.payees.map(payee => fieldOf(payee, 'code'))));
   return { lines, payees };
 }
 
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+/** Calendar days of a traveller's whole trip, first start to last arrival, both counted. */
+const tripDays = legs => daysBetween([...legs.map(leg => leg.startDate)].sort()[0], [...legs.map(leg => leg.arriveDate)].sort().at(-1)) + 1;
 
 function collectTravel() {
   const problems = [];
   const fund = state.funds.find(item => item.code === $('fund-select').value);
   const attachments = Number($('attachments').value);
-  if (!fund) problems.push('请选择经费。');
+  if (!fund) problems.push(at('请选择经费。', 'fund-select'));
   const codes = new Set();
   let legs = 0;
   state.travellers.forEach((traveller, index) => {
     const who = `出差人 ${index + 1}${traveller.name.trim() ? `（${traveller.name.trim()}）` : ''}`;
-    if (!traveller.name.trim()) problems.push(`${who}：请输入姓名并在 OA 中查找。`);
-    else if (!/^[A-Za-z0-9]{2,32}$/.test(traveller.code.trim())) problems.push(`${who}：请在查找结果中选择学号/工号。`);
-    else if (codes.has(traveller.code.trim())) problems.push(`${who}：学号/工号与其他出差人重复。`);
+    if (!traveller.name.trim()) problems.push(at(`${who}：请输入姓名并在 OA 中查找。`, fieldOf(traveller, 'name')));
+    else if (!/^[A-Za-z0-9]{2,32}$/.test(traveller.code.trim())) problems.push(at(`${who}：请在查找结果中选择学号/工号。`, fieldOf(traveller, 'code')));
+    else if (codes.has(traveller.code.trim())) problems.push(at(`${who}：学号/工号与其他出差人重复。`, fieldOf(traveller, 'code')));
     codes.add(traveller.code.trim());
     traveller.legs.forEach((leg, legIndex) => {
       legs++;
       const where = `${who}第 ${legIndex + 1} 段行程`;
-      if (!leg.startDate || !leg.arriveDate) return problems.push(`${where}：请填写启程和到达日期。`);
-      const span = daysBetween(leg.startDate, leg.arriveDate);
-      if (span < 0) problems.push(`${where}：到达日期早于启程日期。`);
-      if (!leg.startAddress.trim() || !leg.arriveAddress.trim()) problems.push(`${where}：请填写出发地和目的地。`);
-      if (!MONEY.test(leg.trafficExpense.trim())) problems.push(`${where}：交通费须为金额（没有填 0）。`);
+      const field = key => fieldOf(leg, key);
       const days = leg.travelDays === '' ? NaN : Number(leg.travelDays);
-      if (!Number.isInteger(days) || days < 0 || days > 999) problems.push(`${where}：差旅天数须为 0–999 的整数。`);
-      else if (span >= 0 && days > span + 1) problems.push(`${where}：差旅天数 ${days} 天多于行程的 ${span + 1} 天。`);
+      if (!Number.isInteger(days) || days < 0 || days > 999) problems.push(at(`${where}：差旅天数须为 0–999 的整数。`, field('travelDays')));
+      if (!leg.startDate || !leg.arriveDate) {
+        problems.push(at(`${where}：请填写启程和到达日期。`, ...['startDate', 'arriveDate'].filter(key => !leg[key]).map(field)));
+      } else if (daysBetween(leg.startDate, leg.arriveDate) < 0) problems.push(at(`${where}：到达日期早于启程日期。`, field('arriveDate')));
+      if (!leg.startAddress.trim() || !leg.arriveAddress.trim()) {
+        problems.push(at(`${where}：请填写出发地和目的地。`, ...['startAddress', 'arriveAddress'].filter(key => !leg[key].trim()).map(field)));
+      }
+      if (!MONEY.test(leg.trafficExpense.trim())) problems.push(at(`${where}：交通费须为金额（没有填 0）。`, field('trafficExpense')));
       for (const [key, label] of [['subsidyAmount', '实际补贴'], ['hotelExpense', '住宿费'], ['meetingAmount', '会务/注册费'], ['otherAmount', '其他']]) {
-        if (String(leg[key]).trim() && !MONEY.test(String(leg[key]).trim())) problems.push(`${where}：${label}须为金额。`);
+        if (String(leg[key]).trim() && !MONEY.test(String(leg[key]).trim())) problems.push(at(`${where}：${label}须为金额。`, field(key)));
       }
       const standard = standardSubsidy(traveller, leg), actual = legCents(leg.subsidyAmount);
       if (String(leg.subsidyAmount).trim() && actual !== null && actual > standard) {
-        problems.push(`${where}：实际补贴 ${leg.subsidyAmount} 元高于标准 ${(standard / 100).toFixed(2)} 元（${TRAVELLER_KINDS[traveller.kind]} ${SUBSIDY_RATES[traveller.kind]} 元/天 × ${Number(leg.travelDays) || 0} 天）。`);
+        problems.push(at(`${where}：实际补贴 ${leg.subsidyAmount} 元高于标准 ${(standard / 100).toFixed(2)} 元（${TRAVELLER_KINDS[traveller.kind]} ${SUBSIDY_RATES[traveller.kind]} 元/天 × ${Number(leg.travelDays) || 0} 天）。`, field('subsidyAmount')));
       }
     });
+    // 差旅天数 are checked for the whole trip only: together they equal first start to last arrival; any one leg may hold them all.
+    const dated = traveller.legs.length && traveller.legs.every(leg => leg.startDate && leg.arriveDate && daysBetween(leg.startDate, leg.arriveDate) >= 0
+      && Number.isInteger(Number(leg.travelDays)) && String(leg.travelDays).trim() !== '');
+    if (dated) {
+      const total = tripDays(traveller.legs), sum = traveller.legs.reduce((acc, leg) => acc + Number(leg.travelDays), 0);
+      if (sum !== total) {
+        problems.push(at(`${who}：各段差旅天数合计 ${sum} 天，应等于行程总天数 ${total} 天（${[...traveller.legs.map(leg => leg.startDate)].sort()[0]} 至 `
+          + `${[...traveller.legs.map(leg => leg.arriveDate)].sort().at(-1)}，含首尾）；天数可以都填在其中一段。`, ...traveller.legs.map(leg => fieldOf(leg, 'travelDays'))));
+      }
+    }
   });
   if (!legs) problems.push('请至少填写一段行程。');
   const orders = ctripOrders();
   const assessed = assessInvoices();
   if (state.invoices.some(item => assessed.get(item).status === 'checking')) problems.push('还有发票正在核对，请稍候。');
   else if (state.invoices.some(item => assessed.get(item).status !== 'ok')) problems.push('请先删除或重试列表中标红的发票。');
-  if (!Number.isInteger(attachments) || attachments < 0 || attachments > 100) problems.push('附件张数应为 0–100 的整数。');
+  if (!Number.isInteger(attachments) || attachments < 0 || attachments > 100) problems.push(at('附件张数应为 0–100 的整数。', 'attachments'));
   const { lines, payees } = collectMoney(problems);
   const reason = $('reason').value.trim() || lines[0]?.purpose || '';
-  if (!reason) problems.push('请填写报销说明（报销事由）。');
+  if (!reason) problems.push(at('请填写报销说明（报销事由）。', 'reason'));
   const action = document.querySelector('input[name="action"]:checked')?.value;
   if (!action) problems.push('请选择完成方式。');
   if (problems.length) return { problems };
@@ -513,11 +574,7 @@ function collectTravel() {
 
 async function submitTravel() {
   const claim = collectTravel();
-  if (claim.problems) {
-    $('claim-error').textContent = claim.problems.join('\n');
-    $('claim-error').hidden = false;
-    return;
-  }
+  if (claim.problems) return showProblems(claim.problems);
   const { input, fund, action, documentNumber, invoices } = claim;
   const { trip, payment } = travelEstimate();
   const summary = [
@@ -525,7 +582,7 @@ async function submitTravel() {
     `单据：${documentNumber || '新建境内差旅单'}`,
     `经费：${fund.label}（可用 ${balanceText(state.fundBalance)}）`,
     `经费明细（合计须等于差旅合计，约 ${yuanOf(trip)} 元）：`,
-    ...input.lines.map((line, index) => `　${index + 1}. ${line.budgetName}　${line.amount ? `${line.amount} 元` : '剩余金额'}　${line.purpose}`),
+    ...input.lines.map((line, index) => `　${index + 1}. ${line.budgetName}　${line.amount ? `${line.amount} 元` : `自动 约 ${yuanOf(split(state.lines, trip).rest)} 元`}　${line.purpose}`),
     ...input.travellers.flatMap(item => [`出差人：${TRAVELLER_KINDS[item.kind]} ${item.code} ${item.name}，${item.legs.length} 段行程`,
       ...item.legs.map(leg => `　${leg.startDate} ${leg.startAddress} → ${leg.arriveDate} ${leg.arriveAddress}，${VEHICLES[leg.vehicle]} ${leg.trafficExpense} 元，${leg.travelDays} 天`)]),
     `发票：${state.invoices.length ? `${state.invoices.length} 张，合计 ${yuan(invoiceTotal() === null ? '' : (invoiceTotal() / 100).toFixed(2))}（须不少于付款金额减去补贴）` : '无'}`,
@@ -533,7 +590,7 @@ async function submitTravel() {
     `携程冲账：${state.ctrip.picked.length ? '' : '无'}`,
     ...state.ctrip.picked.map(item => `　${item.order}　${item.personName}　${item.outstanding} 元　${item.remark}`),
     `收款人（合计约 ${yuanOf(payment)} 元）：${input.payees.length ? '' : '无'}`,
-    ...input.payees.map((payee, index) => `　${index + 1}. ${payee.kind === 'bank' ? `银行汇款给 ${payee.code}（汇款用途：${payee.remitPurpose}）` : `个人银行卡，学号/工号 ${payee.code}`}　${payee.amount ? `${payee.amount} 元` : '剩余金额'}`),
+    ...input.payees.map((payee, index) => `　${index + 1}. ${payee.kind === 'bank' ? `银行汇款给 ${payee.code}（汇款用途：${payee.remitPurpose}）` : `个人银行卡，学号/工号 ${payee.code}`}　${payee.amount ? `${payee.amount} 元` : `自动 约 ${yuanOf(Math.max(0, split(state.payees, payment).rest))} 元`}`),
     `附件 ${input.attachmentCount} 张；报销事由：${input.reason}`,
     '',
     action === 'submit' ? '将填写、保存，回读核对无误后自动提交流转（审批路线用 OA 自动生成的），提交后不能由程序撤回。'
@@ -562,12 +619,21 @@ async function submitTravel() {
   }
 }
 
+function paintTravelToggle(steps = $('travel-events').children.length) {
+  const collapsed = $('travel-card').classList.contains('collapsed');
+  $('travel-toggle').textContent = collapsed ? `展开全部 ${steps} 步` : '收起';
+  $('travel-toggle').setAttribute('aria-expanded', String(!collapsed));
+}
+
 function showTravelRun(run) {
   const [label, tone] = TRAVEL_STATUS[run.status] || [run.status, ''];
   $('travel-card').hidden = false;
   $('travel-doc').textContent = run.documentNumber || '';
   $('travel-status').textContent = label;
   $('travel-status').className = `badge ${tone}`;
+  // A new run opens expanded; collapsed, only its latest step shows.
+  if (run.status === 'running' && state.travelShown !== 'running') $('travel-card').classList.remove('collapsed');
+  paintTravelToggle(run.events.length);
   $('travel-events').replaceChildren(...run.events.map((event, index) => {
     const item = document.createElement('li');
     const text = `${new Date(event.at).toLocaleTimeString('zh-CN')} ${event.message}`;
@@ -583,7 +649,7 @@ function showTravelRun(run) {
       catch (error) { if (error.status === 401) leave('学校 OA 登录已失效，请重新登录。'); else show(error.message, true); }
     }, 1500);
   } else if (state.travelShown === 'running') {
-    toast(`${run.documentNumber ? `差旅单 ${run.documentNumber}` : '差旅单'}：${label}。`, !['completed', 'submitted'].includes(run.status), true);
+    toast(`${run.documentNumber ? `差旅单 ${run.documentNumber}` : '差旅单'}：${label}。`, !['completed', 'submitted'].includes(run.status));
     refreshBudgets();
     if (isTravel()) loadTravelForms();
   }
@@ -634,6 +700,7 @@ function travelOverview() {
 /** 境内差旅单's own controls: draft list, 携程 picker, travellers, 经费明细, 收款人, the run's stop button. */
 function initTravel() {
   $('travel-form-refresh').addEventListener('click', () => loadTravelForms($('travel-form-select').value));
+  $('travel-toggle').addEventListener('click', () => { $('travel-card').classList.toggle('collapsed'); paintTravelToggle(); });
   searchable($('ctrip-select'), { placeholder: '输入订单号、摘要或借款人筛选', empty: '没有匹配的携程借款单' });
   $('ctrip-select').addEventListener('change', pickBorrow);
   $('traveller-add').addEventListener('click', () => { state.travellers.push(blankTraveller()); renderTravellers(); });
@@ -645,7 +712,7 @@ function initTravel() {
   });
   resetTravel();
   registerForm(TRAVEL, {
-    title: '填写境内差旅单', moneyLegend: '收款人与附件', layout: 'travel', budgetsPath: '/api/oa/travel/budgets', reset: resetTravel, submit: () => submitTravel(),
+    title: '填写境内差旅单', moneyLegend: '收款人与附件', invoiceLegend: '票据（发票与行程附件）', layout: 'travel', budgetsPath: '/api/oa/travel/budgets', reset: resetTravel, submit: () => submitTravel(),
     // A run started before a page reload is still followed.
     load: () => api('GET', '/api/oa/travel').then(({ run }) => { if (run) showTravelRun(run); }).catch(() => undefined),
     activate: () => { $('attachments').min = '0'; }, onSelect: () => loadTravelForms(), onFund: loadBorrows, onSubjects: renderLines,

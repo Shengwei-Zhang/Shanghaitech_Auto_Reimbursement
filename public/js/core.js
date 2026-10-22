@@ -21,13 +21,15 @@ async function api(method, path, body) {
 }
 
 let toastTimer = 0;
+document.addEventListener('click', event => { if (event.target.id === 'toast') { event.target.hidden = true; clearTimeout(toastTimer); } });
 function toast(text, isError = false, stay = false) {
   const element = $('toast');
   element.textContent = text;
   element.className = isError ? 'toast error' : 'toast';
   element.hidden = !text;
   clearTimeout(toastTimer);
-  if (text && !stay) toastTimer = setTimeout(() => { element.hidden = true; }, isError ? 6000 : 4000);
+  // Gone after 5 s (a click closes it sooner); only a "please wait" note stays until the next one replaces it.
+  if (text && !stay) toastTimer = setTimeout(() => { element.hidden = true; }, 5000);
 }
 
 function show(text, isError = false) {
@@ -301,4 +303,46 @@ function dropZone(zone, onDrop, onError) {
   });
 }
 
-export { $, api, balanceText, busy, cents, currentForm, currentType, droppedFiles, dropZone, forms, hideCaptcha, KIND_LABEL, leave, MAX_INVOICE_BYTES, NEW_FORM, option, page, pending, PERSON_CODE, readFile, registerForm, rowButton, searchable, show, state, toast, yuan };
+/** The field a problem is about: a searchable select is fixed through its box, a radio through its group. */
+function problemTarget(element) {
+  if (!element) return null;
+  if (element.classList.contains('combo-native')) return element.previousElementSibling?.querySelector('.combo-input') ?? null;
+  if (element.type === 'radio') return element.closest('fieldset, .choices, label') ?? element;
+  return element;
+}
+
+/** The problems in #claim-error, each a text or { text, field } (an element, an id, or several). Every field
+ * named is marked until it is changed; the first is scrolled to and focused, and a problem's line jumps to its field. */
+function showProblems(problems) {
+  for (const marked of document.querySelectorAll('.field-invalid')) marked.classList.remove('field-invalid');
+  const box = $('claim-error');
+  let first = null;
+  const lines = problems.map(item => {
+    const text = typeof item === 'string' ? item : item.text;
+    const fields = [item.field ?? []].flat().map(field => problemTarget(typeof field === 'string' ? $(field) : field)).filter(Boolean);
+    for (const field of fields) {
+      field.classList.add('field-invalid');
+      const clear = () => field.classList.remove('field-invalid');
+      field.addEventListener('input', clear, { once: true });
+      field.addEventListener('change', clear, { once: true });
+    }
+    first ??= fields[0];
+    const line = document.createElement('div');
+    if (!fields.length) { line.textContent = text; return line; }
+    const jump = Object.assign(document.createElement('button'), { type: 'button', className: 'problem-jump', textContent: text,
+      title: '定位到这一项' });
+    jump.addEventListener('click', () => focusField(fields[0]));
+    line.append(jump);
+    return line;
+  });
+  box.replaceChildren(...lines);
+  box.hidden = false;
+  if (first) focusField(first); else box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function focusField(field) {
+  field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  field.focus?.({ preventScroll: true });
+}
+
+export { $, api, balanceText, busy, cents, currentForm, currentType, droppedFiles, dropZone, forms, hideCaptcha, KIND_LABEL, leave, MAX_INVOICE_BYTES, NEW_FORM, option, page, pending, PERSON_CODE, readFile, registerForm, rowButton, searchable, show, showProblems, state, toast, yuan };

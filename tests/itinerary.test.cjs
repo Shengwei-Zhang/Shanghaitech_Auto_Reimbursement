@@ -73,6 +73,9 @@ test('住宿 and 会议 invoices are told apart by their items', () => {
   assert.equal(invoiceFromText('电子发票（普通发票）\n*生产生活服务*代订住宿\n名称：上海科技大学\n名称：某旅行社', 'h.pdf', '466.00').type, 'hotel_invoice');
   assert.equal(invoiceFromText('电子发票\n*现代服务*会议费\n开票日期：2026年08月10日', 'm.pdf', '1200.00').date, '2026-08-10');
   assert.equal(invoiceFromText('电子发票\n*信息技术服务*软件', 'x.pdf', '99.00'), undefined);
+  assert.equal(invoiceFromText('电子发票\n发票号码：26312000000123456789\n*运输服务*客运服务费', 't.pdf', '58.00').type, 'other_invoice');
+  assert.equal(invoiceFromText('电子发票（航空运输电子客票行程单）\n发票号码：26312000000123456780\n电子客票号码 7841234567890', 'f.pdf', '723.00').type,
+    'flight_invoice');
 });
 
 test('buildItinerary: legs in time order, the trip\'s days and the hotel invoice on the first leg, orders for 携程借款单', () => {
@@ -94,6 +97,16 @@ test('buildItinerary: legs in time order, the trip\'s days and the hotel invoice
   assert.ok(trip.warnings.some(text => /按酒店发票填 466\.00 元；水单金额为 416\.00/.test(text)), 'invoice beats folio, and the gap is shown');
   assert.ok(trip.warnings.some(text => /photo\.png/.test(text)));
   assert.equal(items[2].arrival, '2026-04-07', 'the folio reading inside the trip is kept');
+});
+
+test('buildItinerary: another invoice goes to the first leg\'s 其他; an airline 行程单 is not counted again', () => {
+  const trip = buildItinerary([flightFromRows(flightRows(), 'cz3970.pdf'),
+    { type: 'other_invoice', file: 'taxi.pdf', amount: '58.00', seller: '某出租车公司', date: '2026-04-07' },
+    { type: 'flight_invoice', file: 'itinerary.pdf', amount: '723.00', seller: '某航空公司', date: '2026-04-07' }]);
+  const legs = trip.groups[0].legs;
+  assert.deepEqual(legs.map(leg => [leg.trafficExpense, leg.otherAmount]), [['723.00', '58.00']]);
+  assert.ok(trip.warnings.some(text => /taxi\.pdf.*58\.00 元已填入第一段的“其他”/.test(text)));
+  assert.ok(!trip.warnings.some(text => /itinerary\.pdf/.test(text)));
 });
 
 test('buildItinerary flags what needs a person: folio-only hotels, gaps, two trips, refunds, overnight arrivals', () => {
