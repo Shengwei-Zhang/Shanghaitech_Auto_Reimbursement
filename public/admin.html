@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>使用统计 · 报销助手</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/easy.css"><link rel="stylesheet" href="/easy-v2.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="brand"><span class="mark">报</span><div><strong>使用统计</strong><small>报销助手 · 仅管理员可见</small></div></div>
+      <div class="account">
+        <button id="admin-refresh" class="nav-pill" type="button"><span class="pill-icon" aria-hidden="true">↻</span>刷新</button>
+        <a class="nav-pill" href="/"><span class="pill-icon" aria-hidden="true">←</span>返回报销助手</a>
+      </div>
+    </header>
+
+    <main>
+      <div id="message" class="message" role="status" hidden></div>
+
+      <section id="admin-now" class="card" hidden>
+        <p class="eyebrow">现在 · <span id="admin-updated"></span></p>
+        <dl id="now-stats" class="stats admin-stats"></dl>
+      </section>
+
+      <section id="admin-totals" class="card" hidden>
+        <p class="eyebrow">累计 · <span id="admin-since"></span></p>
+        <dl id="total-stats" class="stats admin-stats"></dl>
+        <div class="table-scroll">
+          <table class="invoices admin-table">
+            <thead><tr><th>报销类型</th><th class="num">发起</th><th class="num">已提交</th><th class="num">已保存</th><th class="num">待核对</th><th class="num">失败</th><th class="num">已停止</th><th class="num">成功率</th></tr></thead>
+            <tbody id="form-rows"></tbody>
+          </table>
+        </div>
+        <p id="login-failures" class="hint small"></p>
+      </section>
+
+      <section id="admin-days" class="card" hidden>
+        <p class="eyebrow">最近 30 天</p>
+        <div class="table-scroll">
+          <table class="invoices admin-table">
+            <thead><tr><th>日期</th><th class="num">登录用户</th><th class="num">登录次数</th><th class="num">验证码</th><th class="num">登录失败</th><th class="num">在线峰值</th><th class="num">发起报销单</th><th class="num">成功</th><th class="num">失败</th></tr></thead>
+            <tbody id="day-rows"></tbody>
+          </table>
+        </div>
+        <p class="hint small">“成功”= 已提交 + 已保存（只保存的单据保存成功即算）；“失败”= 失败 + 待核对（OA 结果不明，需人工核对）。用户按学校账号的加密摘要计数，统计中不保存工号、姓名、单据号或金额。</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -195,7 +195,9 @@ export class ApplyMoneyApi {
     const file = path.join(store.directory(job.id), 'oa-session.json');
     try {
       await writeSessionState(storageState, file);
-      return service.start(job.id, { confirmed: true, loginMode: 'manual' }, file, this.ownerId);
+      const started = service.start(job.id, { confirmed: true, loginMode: 'manual' }, file, this.ownerId);
+      this.host.formStarted('用款申请单');
+      return started;
     } catch (error) {
       fs.rmSync(file, { force: true });
       service.cancel(job.id, this.ownerId);

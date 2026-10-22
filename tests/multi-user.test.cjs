@@ -13,7 +13,7 @@ const { JobService } = require('../dist/application/job-service');
 const { JobStore } = require('../dist/infrastructure/job-store');
 
 const ORIGIN = 'https://reim.test';
-const SERVER = { mode: 'server', origins: [ORIGIN], trustProxy: true, idleMinutes: 120, maxSessions: 50, maxActiveJobs: 2, maxParses: 2 };
+const SERVER = { mode: 'server', origins: [ORIGIN], trustProxy: true, idleMinutes: 120, maxSessions: 50, maxActiveJobs: 2, maxParses: 2, admins: [] };
 
 /** A school login that answers for whoever signs in, without any OA. */
 const fakeLogin = async username => {
@@ -212,4 +212,79 @@ test('limiter: at most N tasks at once, the rest in order', async () => {
   assert.equal(peak, 2);
   assert.deepEqual(order.slice(0, 2).sort(), ['a', 'b']);
   assert.equal(new Limiter(0).run(async () => 'unlimited') instanceof Promise, true);
+});
+
+const { UsageStats } = require('../dist/infrastructure/usage-stats');
+
+test('usage stats: users counted by a keyed hash, forms by type and outcome, kept across restarts; no account in the file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-'));
+  try {
+    let now = new Date('2026-10-22T02:00:00Z');
+    const stats = new UsageStats(dir, () => now);
+    stats.login('900001'); stats.login('900001'); stats.login('2020000001');
+    stats.captcha(); stats.loginFailed('credentials_rejected'); stats.loginFailed('../weird');
+    stats.formStarted('用款申请单', '900001'); stats.formFinished('用款申请单', 'submitted');
+    stats.formStarted('境内差旅单', '900001'); stats.formFinished('境内差旅单', 'failed');
+    stats.online(3); stats.online(2);
+    now = new Date('2026-10-22T17:00:00Z'); // 01:00 on the 23rd in Shanghai: a new day
+    stats.login('900001');
+    const again = new UsageStats(dir, () => now).report();
+    assert.equal(again.totals.users, 2, 'two different accounts');
+    assert.equal(again.totals.formUsers, 1);
+    assert.equal(again.totals.logins, 4);
+    assert.deepEqual(again.totals.loginFailures, { credentials_rejected: 1, other: 1 });
+    assert.deepEqual(again.totals.forms['用款申请单'], { started: 1, saved: 0, submitted: 1, needs_review: 0, failed: 0, cancelled: 0 });
+    assert.equal(again.totals.forms['境内差旅单'].failed, 1);
+    assert.equal(again.totals.peakOnline, 3);
+    assert.deepEqual(again.days.map(day => [day.date, day.users, day.logins]), [['2026-10-23', 1, 1], ['2026-10-22', 2, 3]]);
+    const file = fs.readFileSync(path.join(dir, 'stats.json'), 'utf8');
+    for (const secret of ['900001', '2020000001']) assert.ok(!file.includes(secret), 'no account in the stats file');
+    assert.equal(fs.statSync(path.join(dir, 'stats.json')).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(path.join(dir, 'salt')).mode & 0o777, 0o600);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('admin stats: only REIM_ADMIN_ACCOUNTS see them; the counts follow logins and online browsers', async t => {
+  const { browser } = await serverApp(t, { deployment: { ...SERVER, admins: ['900001'] } });
+  const admin = await browser(), other = await browser();
+  assert.equal((await admin.call('GET', '/api/admin/stats')).status, 404, 'not before logging in');
+  await admin.call('POST', '/api/oa/login', { username: '900001', password: 'pw' });
+  await other.call('POST', '/api/oa/login', { username: '2020000001', password: 'pw' });
+  assert.equal((await other.call('GET', '/api/admin/stats')).status, 404, 'another account is told it does not exist');
+  assert.equal((await other.call('GET', '/api/oa/status')).data.admin, false);
+  assert.equal((await admin.call('GET', '/api/oa/status')).data.admin, true);
+  const stats = await admin.call('GET', '/api/admin/stats');
+  assert.equal(stats.status, 200);
+  assert.deepEqual([stats.data.now.online, stats.data.now.loggedIn, stats.data.now.jobsRunning], [2, 2, 0]);
+  assert.equal(stats.data.totals.users, 2);
+  assert.equal(stats.data.totals.logins, 2);
+  assert.ok(!JSON.stringify(stats.data).includes('2020000001'), 'no account in the answer');
+});
+
+test('admin stats on a server without REIM_ADMIN_ACCOUNTS: nobody', async t => {
+  const { browser } = await serverApp(t);
+  const someone = await browser();
+  await someone.call('POST', '/api/oa/login', { username: '900001', password: 'pw' });
+  assert.equal((await someone.call('GET', '/api/admin/stats')).status, 404);
+});
+
+test('job service: each job\'s end is reported once, a job stopped in the queue too', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-user-settled-'));
+  try {
+    const store = new JobStore(path.join(dataDir, 'jobs'));
+    const exits = [];
+    const service = new JobService(store, { review: async () => ({}) }, false, (request, onEvent, onExit) => { exits.push(onExit); return { stop() {} }; });
+    const settled = [];
+    service.onSettled = job => settled.push(job.status);
+    const demo = { mode: 'demo', input: { fundingKindKeyword: '被授权的项目', fundingKeyword: 'P001', budgetKeyword: '委托服务费', amount: '10',
+      attachmentCount: 1, payeeCode: '900001', purpose: '测试' } };
+    const first = await service.create(demo), second = await service.create(demo);
+    service.start(first.id, { confirmed: true });
+    service.start(second.id, { confirmed: true });
+    service.cancel(second.id);
+    assert.deepEqual(settled, ['cancelled'], 'the queued one, at once');
+    exits[0]();
+    assert.deepEqual(settled, ['cancelled', 'interrupted'], 'the running one when its worker exits');
+    service.shutdown();
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });

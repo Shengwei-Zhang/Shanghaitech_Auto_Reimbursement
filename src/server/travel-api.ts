@@ -33,6 +33,7 @@ export interface TravelRun {
 }
 
 const FUNDING_CODE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+const TRAVEL_TYPE = '境内差旅单';
 const yuanText = (value: number) => `${Number(value).toFixed(2)} 元`;
 
 function record(body: unknown): Record<string, unknown> {
@@ -167,6 +168,7 @@ export class TravelApi {
     this.run = run;
     this.stopRun = () => { stopped = true; };
     const note = (step: TravelRun['events'][number]['step'], message: string) => run.events.push({ at: new Date().toISOString(), step, message });
+    this.host.formStarted(TRAVEL_TYPE);
     void (async () => {
       try {
         note('create', documentNumber ? `正在打开空白差旅单 ${documentNumber}。` : '正在新建境内差旅单。');
@@ -203,7 +205,11 @@ export class TravelApi {
         note('save', `已停止：${run.error}${run.partial ? '本单已写入部分内容，请在 OA 中核对或删除。'
           : run.documentNumber ? `${run.documentNumber} 仍是空单。` : ''}`);
       }
-    })();
+    })().finally(() => {
+      const outcome = ({ completed: 'saved', submitted: 'submitted', needs_review: 'needs_review', failed: 'failed', cancelled: 'cancelled' } as const)[
+        run.status as Exclude<TravelRun['status'], 'running'>];
+      this.host.formFinished(TRAVEL_TYPE, outcome ?? 'failed');
+    });
     return { run };
   }
 

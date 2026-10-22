@@ -341,3 +341,10 @@ main > * { min-width:0; }
 #travel-card.collapsed .travel-note, #travel-card.collapsed #travel-events li:not(:last-child) { display:none; }
 #travel-card.collapsed #travel-events { margin-bottom:4px; }
 #toast { cursor:pointer; }
+
+/* /admin: usage statistics. */
+.admin-stats { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); row-gap:14px; margin-top:8px; }
+.admin-table { min-width:640px; margin-top:16px; }
+.admin-table td.num, .admin-table th.num { text-align:right; font-family:var(--mono); }
+#admin-refresh { cursor:pointer; }
+#login-failures, #admin-days > .hint { margin-top:12px; }

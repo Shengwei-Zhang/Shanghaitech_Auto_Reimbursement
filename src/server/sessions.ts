@@ -87,6 +87,12 @@ export class SessionRegistry {
     return this.sessions.size;
   }
 
+  /** Browsers with a request in the last `withinMs` (online), and of those, the ones logged in to school OA. */
+  online(withinMs = 5 * 60_000): { online: number; loggedIn: number } {
+    const recent = [...this.sessions.values()].filter(session => this.now() - session.lastSeen <= withinMs);
+    return { online: recent.length, loggedIn: recent.filter(session => session.api.current()).length };
+  }
+
   /** Every session's OaApi (e.g. to find the one a job belongs to). */
   apis(): OaApi[] {
     return [...this.sessions.values()].map(session => session.api);

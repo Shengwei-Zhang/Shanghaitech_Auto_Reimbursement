@@ -17,6 +17,7 @@ import { Created, type FormContext } from './form-routes';
 import { pagePath } from './page-path';
 import type { Deployment } from './deployment';
 import { equalSecret, Limiter, SessionRegistry } from './sessions';
+import { UsageStats } from '../infrastructure/usage-stats';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
  * / redirects here. */
@@ -31,6 +32,9 @@ const STATIC_FILES: Record<string, [string, string]> = {
   '/print.js': ['print.js', 'text/javascript; charset=utf-8'],
   '/print-list': ['print-list.html', 'text/html; charset=utf-8'],
   '/print-list.js': ['print-list.js', 'text/javascript; charset=utf-8'],
+  // Usage statistics: the page is public, its data (GET /api/admin/stats) only for the administrator.
+  '/admin': ['admin.html', 'text/html; charset=utf-8'],
+  '/admin.js': ['admin.js', 'text/javascript; charset=utf-8'],
 };
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -67,7 +71,9 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions) {
   const deployment: Deployment = options.deployment ?? { mode: 'local', origins: [], trustProxy: false, idleMinutes: 120, maxSessions: 1,
-    maxActiveJobs: 1, maxParses: 0 };
+    maxActiveJobs: 1, maxParses: 0, admins: [] };
+  /** Usage counts for the administrator (no personal data; see usage-stats.ts). */
+  const usage = new UsageStats(path.join(options.dataDir, 'stats'));
   /** 票据 parsing (OCR of scans takes a CPU core for seconds): at most maxParses at once, the rest wait their turn. */
   const parses = new Limiter(deployment.maxParses);
   const shared = deployment.mode === 'local';
@@ -82,7 +88,17 @@ export function createApp(options: AppOptions) {
     api.useJobs({ service, store });
     return api;
   };
-  const sessions = new SessionRegistry(() => makeApi(), { shared, idleMs: deployment.idleMinutes * 60_000, max: deployment.maxSessions });
+  const sessions = new SessionRegistry(() => { const api = makeApi(); api.usage = usage; return api; },
+    { shared, idleMs: deployment.idleMinutes * 60_000, max: deployment.maxSessions });
+  /** Who may see the statistics: a listed school account; locally, with no list, the one logged-in user. */
+  const isAdmin = (api: OaApi) => {
+    const account = api.account()?.toLowerCase();
+    const admins = deployment.admins ?? [];
+    return Boolean(account) && (admins.length ? admins.includes(account!) : shared);
+  };
+  // The day's peak of browsers online, sampled each minute.
+  const sampler = setInterval(() => usage.online(sessions.online().online), 60_000);
+  sampler.unref();
   /** The OaApi a job belongs to: the browser session with the job's owner id. A session that has ended has no login to run on. */
   const apiFor = (ownerId: string): OaApi => {
     const api = sessions.apis().find(item => item.ownerId === ownerId);
@@ -100,6 +116,15 @@ export function createApp(options: AppOptions) {
     || (job.action === 'submit' && process.env.OA_HTTP_SUBMIT === 'false');
   const service = new JobService(store, options.advisor || new DeepSeekAdvisor(options.deepSeekKey || ''),
     options.liveEnabled === true, launcher, options.timeoutMs, options.siteProfile, deployment.maxActiveJobs, heavy);
+  // How each page 用款申请单 ended: submitted (receipt), saved, unclear, failed or stopped.
+  service.onSettled = job => {
+    if (job.mode !== 'live') return;
+    const outcome = job.status === 'submitted' ? 'submitted'
+      : job.status === 'verified' ? (job.action === 'submit' ? 'submitted' : 'saved')
+        : job.status === 'needs_review' ? (job.action === 'save' && job.result ? 'saved' : 'needs_review')
+          : job.status === 'cancelled' ? 'cancelled' : 'failed';
+    usage.formFinished('用款申请单', outcome);
+  };
   const publicDir = options.publicDir || path.resolve(__dirname, '../../public');
   // The page's modules, one per shared part and per 报销类型 (see public/js/main.js): every public/js/*.js, so a new
   // 报销类型's module is served without listing it here. Only plain names; nothing below public/js.
@@ -154,6 +179,16 @@ export function createApp(options: AppOptions) {
           throw new AppError(403, '请求校验失败，请刷新页面后重试。');
         }
         const { api: oaApi } = session, owner = oaApi.ownerId;
+        // Usage statistics: the administrator's school account only; anyone else is told it does not exist.
+        if (url.pathname === '/api/admin/stats') {
+          if (req.method !== 'GET' || !isAdmin(oaApi)) throw new AppError(404, '接口不存在。');
+          const now = sessions.online();
+          usage.online(now.online);
+          const travelRunning = sessions.apis().filter(api => api.travel.status().run?.status === 'running').length;
+          return json(200, { now: { online: now.online, loggedIn: now.loggedIn, sessions: sessions.size,
+            jobsRunning: service.running, jobsQueued: service.queued, travelRunning, mode: deployment.mode }, ...usage.report(30) });
+        }
+        if (url.pathname === '/api/oa/status' && req.method === 'GET') return json(200, { ...oaApi.status(), admin: isAdmin(oaApi) });
         // The login, shared queries and every 报销类型's own routes (oa-api.ts), all of this browser's.
         if (url.pathname.startsWith('/api/oa/')) {
           const result = await handleOaRoute(oaApi, req.method || 'GET', url, () => readJson(req), contextOf(oaApi));
@@ -238,7 +273,7 @@ export function createApp(options: AppOptions) {
   });
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
-  server.on('close', () => { service.shutdown(); sessions.close(); });
+  server.on('close', () => { service.shutdown(); sessions.close(); clearInterval(sampler); });
   return { server, service, store };
 }
 

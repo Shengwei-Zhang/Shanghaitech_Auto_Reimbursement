@@ -18,6 +18,8 @@ export interface Deployment {
   maxActiveJobs: number;
   /** 票据 parsed at once (OCR of scans is CPU-bound); 0 = no limit. */
   maxParses: number;
+  /** School accounts that may open the usage statistics (/admin). Empty: nobody on a server; the one user locally. */
+  admins: string[];
 }
 
 export class DeploymentError extends Error {}
@@ -45,5 +47,12 @@ export function deploymentFromEnv(env: NodeJS.ProcessEnv = process.env): Deploym
     idleMinutes: number('REIM_SESSION_IDLE_MINUTES', 120, 5, 24 * 60),
     maxSessions: number('REIM_MAX_SESSIONS', mode === 'server' ? 200 : 1, 1, 10_000),
     maxActiveJobs: number('REIM_MAX_ACTIVE_JOBS', mode === 'server' ? 2 : 1, 1, 64),
-    maxParses: number('REIM_MAX_PARSES', mode === 'server' ? Math.max(1, os.cpus().length - 1) : 0, 0, 256) };
+    maxParses: number('REIM_MAX_PARSES', mode === 'server' ? Math.max(1, os.cpus().length - 1) : 0, 0, 256),
+    admins: admins(env.REIM_ADMIN_ACCOUNTS) };
+}
+
+function admins(value: string | undefined): string[] {
+  const list = (value ?? '').split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+  for (const account of list) if (!/^\w{1,32}$/.test(account)) throw new DeploymentError(`REIM_ADMIN_ACCOUNTS 中的 ${account} 不是学号/工号。`);
+  return list;
 }

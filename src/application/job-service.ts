@@ -177,6 +177,8 @@ export class JobService {
   /** Running jobs: one per owner (one school login takes one request at a time); `heavy` ones (a browser or a child
    * process) also at most `maxActive` at once. Jobs over HTTP mostly wait on OA, so they are not capped. */
   private active = new Map<string, { ownerId: string; heavy: boolean; worker: ReturnType<LaunchWorker>; timer: NodeJS.Timeout }>();
+  /** Told once of each job whose run has ended, or that was stopped while queued (usage statistics). */
+  onSettled?: (job: Job) => void;
   private reviewInFlight = new Set<string>();
   private planInFlight = new Set<string>();
   private closing = false;
@@ -302,6 +304,8 @@ export class JobService {
         ? '用户停止执行。已经发生的 OA 操作不会回滚，请核对现有单据。' : '任务已取消，未开始执行。' });
     });
     this.active.get(id)?.worker.stop();
+    // A queued job never ran: its end is now. A running one ends when its worker exits.
+    if (job.status === 'queued') this.settled(id, ownerId);
     return updated;
   }
 
@@ -499,6 +503,7 @@ export class JobService {
       });
       const active = this.active.get(job.id);
       if (active) { clearTimeout(active.timer); this.active.delete(job.id); }
+      this.settled(job.id, owner);
       setImmediate(() => this.pump());
     };
     try {
@@ -518,6 +523,15 @@ export class JobService {
     } catch { onEvent({ type: 'failure' }); onExit(); }
     // Neither credentials nor raw automation logs are persisted or returned by the API.
     next.credentials = undefined;
+  }
+
+  private settled(id: string, ownerId: string): void {
+    try { this.onSettled?.(this.store.get(id, ownerId)); } catch { /* statistics never fail a job */ }
+  }
+
+  /** How many jobs are waiting. */
+  get queued(): number {
+    return this.queue.length;
   }
 
   /** How many jobs are running now. */

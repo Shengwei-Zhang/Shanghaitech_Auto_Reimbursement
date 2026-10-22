@@ -33,6 +33,9 @@ async function signIn(event) {
     $('account-name').textContent = login.userName || login.userAccount;
     $('account-id').textContent = `工号 ${login.userAccount}`;
     $('account-avatar').textContent = (login.userName || login.userAccount).slice(0, 1);
+    // The 统计 link, for the administrator's account only (the server decides).
+    $('admin-open').hidden = true;
+    api('GET', '/api/oa/status').then(current => { $('admin-open').hidden = current.admin !== true; }).catch(() => undefined);
     $('login-proof-title').textContent = `已于 ${new Date(login.at).toLocaleTimeString('zh-CN')} 由后台完成登录`
       + `${login.savedPassword ? '（密码取自 .env）' : ''}`;
     $('login-steps').replaceChildren(...login.steps.map(step => {

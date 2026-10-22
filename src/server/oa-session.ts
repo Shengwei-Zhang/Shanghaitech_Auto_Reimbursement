@@ -9,6 +9,7 @@ import { TaskSearchError } from '../automation/task-search';
 import { InvoiceClaimError } from '../automation/invoice-claim';
 import { PrintError } from '../automation/http-print';
 import { PayeeError } from '../automation/http-payee';
+import type { FormOutcome } from '../infrastructure/usage-stats';
 
 export interface LoginHooks {
   client?: OaHttpClient;
@@ -52,6 +53,15 @@ export function savedCredentials(env: NodeJS.ProcessEnv = process.env): SavedCre
 
 /** What every 报销类型's server module borrows from the one school login (see docs/architecture.md):
  * the session, its request queue, the reading session, the end of a login, and 报销单查询 as receipt. */
+/** Where usage is counted (infrastructure/usage-stats.ts); every call is optional and never fails the caller. */
+export interface UsageSink {
+  login(account: string): void;
+  captcha(): void;
+  loginFailed(code: string): void;
+  formStarted(type: string, account: string | undefined): void;
+  formFinished(type: string, outcome: FormOutcome): void;
+}
+
 export interface FormHost {
   session(): OaHttpClient;
   /** The login's client, or undefined once it has ended. */
@@ -61,11 +71,16 @@ export interface FormHost {
   reset(): void;
   fail(error: unknown): never;
   ownerStatus(client: OaHttpClient, billCode: string, until?: string): Promise<{ status: string; amount: string } | undefined>;
+  /** Counts a form the page sent (for the administrator's statistics) under this login's account. */
+  formStarted(type: string): void;
+  formFinished(type: string, outcome: FormOutcome): void;
 }
 
 /** One school session per local server, held only in memory: login (with the CAS captcha), the request
  * queue every write waits in, and a second BPM session for read-only queries. No 报销类型 logic. */
 export class OaSession implements FormHost {
+  /** Usage statistics, when the server keeps them. */
+  usage?: UsageSink;
   protected client?: OaHttpClient;
   protected login?: LoginEvidence;
   private direct?: QueryDocument;
@@ -204,8 +219,25 @@ export class OaSession implements FormHost {
         savedPassword,
         steps: ['统一身份认证（CAS）接受账号密码并签发登录票据', `门户 getLoginUser 确认账号 ${client.account.userAccount}`,
           'BPM 报销系统单点登录完成并取得页面令牌'] };
+      this.usage?.login(client.account.userAccount);
       return this.status();
-    } catch (error) { this.fail(error); }
+    } catch (error) {
+      this.usage?.loginFailed(String((error as { code?: string })?.code ?? 'other'));
+      this.fail(error);
+    }
+  }
+
+  formStarted(type: string): void {
+    this.usage?.formStarted(type, this.login?.userAccount);
+  }
+
+  formFinished(type: string, outcome: FormOutcome): void {
+    this.usage?.formFinished(type, outcome);
+  }
+
+  /** The account of this login, or undefined. */
+  account(): string | undefined {
+    return this.login?.userAccount;
   }
 
   async signIn(body: unknown) {
@@ -224,8 +256,12 @@ export class OaSession implements FormHost {
     const answered = new Promise<string>((resolve, reject) => { answer = resolve; cancel = reject; });
     const login = this.signInWith(username.trim(), password, { client, solveCaptcha: image => { asked(image); return answered; } });
     login.catch(() => undefined);
-    const first = await Promise.race([login.then(() => undefined), askedFor]).catch(error => this.fail(error));
+    const first = await Promise.race([login.then(() => undefined), askedFor]).catch(error => {
+      this.usage?.loginFailed(String((error as { code?: string })?.code ?? 'other'));
+      return this.fail(error);
+    });
     if (!first) return this.finishLogin(login, useSaved);
+    this.usage?.captcha();
     let image: string;
     try { image = captchaImage(first); } catch (error) {
       cancel(error as Error);
