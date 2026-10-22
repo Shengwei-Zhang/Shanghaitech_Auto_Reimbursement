@@ -73,6 +73,11 @@ test('用款申请单: fund, budget item, a folder invoice, payee and purpose be
   const stub = await openPage(page);
   await expect(page.locator('#claim-title')).toHaveText('填写用款申请单');
   await expect(page.locator('#travel')).toBeHidden();
+  // 保存并提交流转 is the default, also after 清空重填.
+  await expect(page.locator('input[name=action][value=submit]')).toBeChecked();
+  await page.check('input[name=action][value=save]');
+  await page.click('#claim-new');
+  await expect(page.locator('input[name=action][value=submit]')).toBeChecked();
   await choose(page, '#fund-select', 'P001');
   await expect(page.locator('#subject-select')).toBeEnabled();
   await choose(page, '#subject-select', '01:30');
