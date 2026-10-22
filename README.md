@@ -217,7 +217,7 @@ node --test tests/http-login.test.cjs tests/http-bpm.test.cjs tests/http-fill.te
 
 GitHub 上的代码是**脱敏后的发布副本**：测试夹具和文档中的真实姓名、工号、报销单号、携程订单号、经费与部门编号都已换成同格式的占位值，提交作者为 `Reimbursement Copilot`，不含开发历史。每次同步前先检查是否残留个人信息（手机号、身份证号、邮箱、真实格式的单号等），并在脱敏副本中运行全部测试，任一不通过即不发布。含真实信息的完整开发历史只保存在本机开发仓库，不推送到 GitHub。
 
-开发版和发布版的页面地址不同：本机开发仓库为 `/Reim-Copilot`，GitHub 上的发布副本为 `/Reim-Copilot`（发布时替换）。两者都会把 `/` 跳转到自己的页面。
+页面地址随所在分支而定：`deploy`、`main` 分支为 `/Reim-Copilot`，其他分支（`dev`）为 `/Reim-Copilot`，在服务启动时读取当前分支（切换分支后重新 `npm start`）；GitHub 上的发布副本一律为 `/Reim-Copilot`。`/` 会跳转到当前地址。
 
 部署时克隆 `deploy`：
 

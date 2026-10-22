@@ -14,10 +14,11 @@ import { JobService, inspectInvoice, splitInvoicePdf, launchWorker, LOCAL_OWNER,
 import type { SiteProfile } from '../domain/workflow';
 import { CONTRACTS } from '../automation/contracts';
 import { OaApi, handleOaRoute } from './oa-api';
+import { pagePath } from './page-path';
 
-/** The page's address. The development repository serves /Reim-Copilot; the published copy (scripts/export-deploy.mjs)
- * serves /Reim-Copilot. / redirects here. */
-export const PAGE_PATH = '/Reim-Copilot';
+/** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
+ * / redirects here. */
+export const PAGE_PATH = pagePath();
 
 const MAX_BODY = 12 * 1024 * 1024;
 const STATIC_FILES: Record<string, [string, string]> = {
