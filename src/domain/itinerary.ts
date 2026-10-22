@@ -4,7 +4,9 @@
 
 export type ItineraryItem =
   | { type: 'train'; file: string; passenger: string; number: string; date: string; time: string; from: string; to: string;
-    fromStation: string; toStation: string; fare: string; seat: string; invoiceNumber: string; refund: boolean }
+    fromStation: string; toStation: string; fare: string; seat: string; invoiceNumber: string; refund: boolean;
+    /** 开票日期 (DateOfIssue) YYYY-MM-DD; empty when the XML leaves it out. */
+    issued?: string }
   | { type: 'flight'; file: string; order: string; number: string; date: string; time: string; arriveDate: string; arriveTime: string;
     from: string; to: string; fromCode: string; toCode: string; total: string }
   | { type: 'flight_other'; file: string; order: string; total: string }
@@ -76,7 +78,8 @@ export function trainFromXml(xml: string, file: string): ItineraryItem | undefin
     fromStation: value('DepartureStation'), toStation: value('DestinationStation'),
     from: stationCity(value('DepartureStation')), to: stationCity(value('DestinationStation')),
     fare: money(Number(fare)), seat: value('SeatLevel'), invoiceNumber: value('ElectronicInvoiceRailwayETicketNumber'),
-    refund: value('TypeOfBusiness') === '退' || (refunded !== '' && Number(refunded) > 0) };
+    refund: value('TypeOfBusiness') === '退' || (refunded !== '' && Number(refunded) > 0),
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(value('DateOfIssue')) ? { issued: value('DateOfIssue') } : {}) };
 }
 
 /** A 携程 flight order page, from its text rows (see readInvoicePdf). The first "¥… x1" line is the

@@ -14,6 +14,7 @@ const railXml = ({ name = '张三', from = '长沙南', to = '上海虹桥', tra
   business = '售', refunded = '' } = {}) => `<?xml version="1.0" encoding="UTF-8"?><xbrl xmlns:rai="http://xbrl.mof.gov.cn/taxonomy/2021-11-30/rai">
 <rai:TypeOfVoucher contextRef="c">电子发票（铁路电子客票）</rai:TypeOfVoucher>
 <rai:ElectronicInvoiceRailwayETicketNumber contextRef="c">26429165818000000001</rai:ElectronicInvoiceRailwayETicketNumber>
+<rai:DateOfIssue contextRef="c">2026-09-19</rai:DateOfIssue>
 <rai:TypeOfBusiness contextRef="c">${business}</rai:TypeOfBusiness><rai:DepartureStation contextRef="c">${from}</rai:DepartureStation>
 <rai:DestinationStation contextRef="c">${to}</rai:DestinationStation><rai:TrainNumber contextRef="c">${train}</rai:TrainNumber>
 <rai:TravelDate contextRef="c">${date}</rai:TravelDate><rai:DepartureTime contextRef="c">${time}</rai:DepartureTime>
@@ -35,7 +36,7 @@ test('a 铁路电子客票 is read from its embedded XBRL; stations become citie
   const item = trainFromXml(railXml(), 'g252.pdf');
   assert.deepEqual({ ...item }, { type: 'train', file: 'g252.pdf', passenger: '张三', number: 'G252', date: '2026-04-08', time: '18:40',
     fromStation: '长沙南', toStation: '上海虹桥', from: '长沙', to: '上海', fare: '786.00', seat: '一等座',
-    invoiceNumber: '26429165818000000001', refund: false });
+    invoiceNumber: '26429165818000000001', refund: false, issued: '2026-09-19' });
   assert.equal(trainFromXml(railXml({ business: '退' }), 'x').refund, true);
   assert.equal(trainFromXml(railXml({ refunded: '120.00' }), 'x').refund, true);
   assert.equal(trainFromXml('<rai:TypeOfVoucher>增值税电子普通发票</rai:TypeOfVoucher>', 'x'), undefined);
@@ -165,4 +166,18 @@ test('files: a PDF with the rail XML attached, a Word notice, and images when OC
     fs.rmSync(empty, { recursive: true, force: true });
   }
   assert.equal((await parseItineraryFile('readme.txt', Buffer.from('hello')))[0].type, 'unknown');
+});
+
+test('发票 reads a 铁路电子客票 whose page has no text from its embedded XML: number, 票价, 国铁集团, 开票日期', async () => {
+  const { inspectInvoice } = require('../dist/application/job-service.js');
+  const doc = await PDFDocument.create();
+  doc.addPage();
+  await doc.attach(Buffer.from(railXml({ fare: '1005.00' })), 'rai_issuer_20260919_1.xml', { mimeType: 'application/xml' });
+  const { invoice } = await inspectInvoice({ name: '火车票.pdf', base64: Buffer.from(await doc.save()).toString('base64') });
+  assert.deepEqual([invoice.number, invoice.amount, invoice.seller, invoice.date],
+    ['26429165818000000001', '1005.00', '中国国家铁路集团有限公司', '2026-09-19']);
+  // A PDF with neither text nor a ticket XML is still refused.
+  const blank = await PDFDocument.create();
+  blank.addPage();
+  await assert.rejects(inspectInvoice({ name: 'x.pdf', base64: Buffer.from(await blank.save()).toString('base64') }), /无法从 PDF 内容唯一识别/);
 });

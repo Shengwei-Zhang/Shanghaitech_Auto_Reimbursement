@@ -4,6 +4,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { fork, type ChildProcess } from 'node:child_process';
 import { PDFDocument } from 'pdf-lib';
 import { readInvoicePdf } from '../infrastructure/invoice-pdf';
+import { embeddedFiles } from '../infrastructure/itinerary-files';
+import { trainFromXml } from '../domain/itinerary';
+import { RAILWAY_SELLER } from '../domain/invoice-total';
 import { pickInvoiceNumberFromText } from '../automation/invoice-pdf';
 import { AppError, STAGES, MAX_INVOICES, object, parseInput, parseCredentials, preflight, moneyToCents, jobInvoices, invoiceFileName,
   type Credentials, type Invoice, type Job, type WorkerRequest, type WorkerEvent } from '../domain/job';
@@ -142,6 +145,17 @@ export async function inspectInvoice(value: unknown): Promise<{ invoice: Invoice
     number = pickInvoiceNumberFromText(parsed.text || '', null);
     amount = parsed.amount;
     parties = invoicePartiesFromText(parsed.text || '');
+    // A 铁路电子客票 issued as a 全电发票 may draw its page as images, with every value in the XBRL it embeds
+    // (rai_issuer_*.xml): the ticket number is the invoice number, the 票价 its amount, issued by 国铁集团.
+    if (!number) {
+      const ticket = (await embeddedFiles(buffer).catch(() => [])).map(file => trainFromXml(file.text, upload.name))
+        .find(item => item?.type === 'train' && /^\d{20}$/.test(item.invoiceNumber));
+      if (ticket?.type === 'train') {
+        number = ticket.invoiceNumber;
+        amount = ticket.fare;
+        parties = { seller: RAILWAY_SELLER, ...(ticket.issued ? { date: ticket.issued } : {}) };
+      }
+    }
   } catch (cause) {
     const error = new AppError(400, 'PDF 无法解析。请使用未加密、可提取文字的全电发票。');
     error.cause = cause;
