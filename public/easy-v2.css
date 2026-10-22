@@ -254,7 +254,9 @@ button.icon:hover { background:var(--lime-soft); }
 .check strong { font-size:12px; }
 .check span { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .check.ok { border-left-color:var(--lime-2); background:linear-gradient(90deg, var(--lime-soft), var(--white) 70%); }
-.check:not(.ok) strong::after { content:" ·"; color:var(--amber); }
+.check:not(.ok):not(.optional) strong::after { content:" ·"; color:var(--amber); }
+.check.optional { border-style:dashed; border-left:3px dashed var(--line-2); background:var(--panel-2); }
+.check.optional strong { color:var(--muted); font-weight:600; }
 .ready-actions { display:grid; gap:10px; justify-items:end; padding-left:18px; border-left:1px solid var(--line); }
 .choices { display:flex; align-items:center; gap:4px; padding:3px; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; }
 .choices-label { padding:0 8px 0 6px; }

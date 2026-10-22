@@ -26,12 +26,14 @@ function refreshOverview() {
   }));
   const action = document.querySelector('input[name="action"]:checked');
   const checks = [...view.checks, { label: '完成方式', ok: Boolean(action), detail: action ? action.closest('label').textContent.trim() : '未选择' }];
-  const done = checks.filter(check => check.ok).length;
-  $('ready-count').textContent = `${done} / ${checks.length}`;
-  $('ready-note').textContent = done === checks.length ? '可以提交' : `${checks.length - done} 项未完成`;
+  // Optional items (a 差旅单 without invoices) are listed but not counted.
+  const counted = checks.filter(check => !check.optional);
+  const done = counted.filter(check => check.ok).length;
+  $('ready-count').textContent = `${done} / ${counted.length}`;
+  $('ready-note').textContent = done === counted.length ? '可以提交' : `${counted.length - done} 项未完成`;
   $('ready-checks').replaceChildren(...checks.map(check => {
     const item = document.createElement('li');
-    item.className = `check${check.ok ? ' ok' : ''}`;
+    item.className = `check${check.optional ? ' optional' : check.ok ? ' ok' : ''}`;
     item.append(Object.assign(document.createElement('strong'), { textContent: check.label }),
       Object.assign(document.createElement('span'), { textContent: check.detail ?? '' }));
     item.title = check.detail ?? '';

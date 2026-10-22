@@ -204,3 +204,31 @@ test('行程附件: a parsed ticket is previewed, then fills the traveller and t
   expect(stub.posts.some(post => post.path === '/api/oa/travel')).toBe(false);
   expect(stub.errors).toEqual([]);
 });
+
+test('境内差旅单 counts nothing as done that was not filled in; invoices are optional, not done', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  // Only 完成方式 (default 保存并提交流转) is done; 收款人 is not "done" just because nothing is owed yet.
+  await expect(page.locator('#ready-count')).toHaveText('1 / 6');
+  await expect(page.locator('.check', { hasText: '收款人' })).not.toHaveClass(/\bok\b/);
+  await expect(page.locator('.check', { hasText: '收款人' })).toContainText('待填行程');
+  await expect(page.locator('.check', { hasText: '发票' })).toHaveClass(/\boptional\b/);
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  await expect(page.locator('#ready-count')).toHaveText('2 / 6');
+});
+
+test('an open dropdown that is still loading is not redrawn (no flicker)', async ({ page }) => {
+  await openPage(page);
+  // The draft list never answers: its loading option stays.
+  await page.route('**/api/oa/travel/forms', () => new Promise(() => {}));
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  const loading = page.locator('#travel-form-select option').nth(1);
+  await expect(loading).toBeDisabled();
+  await page.locator('#travel-form-select').focus();
+  const before = await loading.textContent();
+  await page.waitForTimeout(1300);
+  expect(await loading.textContent()).toBe(before);
+  // Unfocused, it animates again.
+  await page.locator('#fund-kind').focus();
+  await expect.poll(() => loading.textContent(), { timeout: 2000 }).not.toBe(before);
+});

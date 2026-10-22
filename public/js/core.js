@@ -52,7 +52,10 @@ function pending(element, text) {
 }
 setInterval(() => {
   const dots = '.'.repeat(Math.floor(Date.now() / 400) % 4);
+  // Changing an option of an open (focused) dropdown redraws it every tick, which flickers.
+  const open = document.activeElement?.tagName === 'SELECT' ? document.activeElement : null;
   for (const element of document.querySelectorAll('[data-pending]')) {
+    if (open?.contains(element)) continue;
     if (element.textContent !== element.dataset.pendingShown) {
       delete element.dataset.pending;
       delete element.dataset.pendingShown;

@@ -179,7 +179,7 @@ let travelFormsSeq = 0;
 /** Blank 境内差旅单 drafts from 报销单查询 (预制, nothing saved); the fill re-checks before writing. */
 async function loadTravelForms(selected) {
   const seq = ++travelFormsSeq, select = $('travel-form-select');
-  select.replaceChildren(option(NEW_FORM, '＋ 新建境内差旅单'), pending(option('', ''), '正在查找空白差旅单…'));
+  select.replaceChildren(option(NEW_FORM, '＋ 新建境内差旅单'), Object.assign(pending(option('', ''), '正在查找空白差旅单…'), { disabled: true }));
   select.value = NEW_FORM;
   try {
     const { forms } = await api('GET', '/api/oa/travel/forms');
@@ -603,6 +603,9 @@ function travelOverview() {
     && String(leg.trafficExpense).trim() !== '' && String(leg.travelDays).trim() !== '');
   const assessed = assessInvoices();
   const document = $('travel-form-select').value;
+  // Every payee row names someone; a 银行汇款 one also has its account and 汇款用途.
+  const payeesFilled = state.payees.length > 0 && state.payees.every(payee => payee.code.trim()
+    && (payeeIsCard(payee) || (payee.supplierCode && payee.remitPurpose.trim())));
   return {
     eyebrow: `境内差旅单 · ${!document || document === NEW_FORM ? '新建' : document}`,
     subtitle: fund ? fund.label : '先选择经费',
@@ -618,10 +621,12 @@ function travelOverview() {
       { label: '行程', ok: legsOk, detail: `${legs.length} 段` },
       { label: '经费明细', ok: trip > 0 && lines.ok && state.lines.every(line => line.subject && line.purpose.trim()),
         detail: trip ? (lines.ok ? `${state.lines.length} 行，合计 ${yuanOf(trip)} 元` : `相差 ${yuanOf(Math.abs(lines.rest))} 元`) : '待填行程' },
-      { label: '收款人', ok: payment === 0 || payees.ok || (payees.blanks === 1 && payees.rest === 0),
-        detail: payment ? `应付 ${yuanOf(payment)} 元` : '冲账已覆盖' },
-      { label: '发票', ok: state.invoices.every(item => assessed.get(item)?.status === 'ok'),
-        detail: state.invoices.length ? `${state.invoices.length} 张，合计 ${yuan(invoiceTotal() === null ? '' : (invoiceTotal() / 100).toFixed(2))}` : '无（补贴不需发票）' },
+      // Nothing to pay is only settled once there is a trip (and the write-offs cover it).
+      { label: '收款人', ok: trip > 0 && (payment === 0 || (payeesFilled && (payees.ok || (payees.blanks === 1 && payees.rest === 0)))),
+        detail: !trip ? '待填行程' : !payment ? '冲账已覆盖' : payeesFilled ? `应付 ${yuanOf(payment)} 元` : '未填写收款人' },
+      // Invoices are optional on a 差旅单 (subsidies need none): shown, not counted, until one is added.
+      { label: '发票', optional: !state.invoices.length, ok: state.invoices.length > 0 && state.invoices.every(item => assessed.get(item)?.status === 'ok'),
+        detail: state.invoices.length ? `${state.invoices.length} 张，合计 ${yuan(invoiceTotal() === null ? '' : (invoiceTotal() / 100).toFixed(2))}` : '可选，未添加' },
     ],
   };
 }
