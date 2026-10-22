@@ -13,7 +13,7 @@ const { JobService } = require('../dist/application/job-service');
 const { JobStore } = require('../dist/infrastructure/job-store');
 
 const ORIGIN = 'https://reim.test';
-const SERVER = { mode: 'server', origins: [ORIGIN], trustProxy: true, idleMinutes: 120, maxSessions: 50, maxActiveJobs: 4 };
+const SERVER = { mode: 'server', origins: [ORIGIN], trustProxy: true, idleMinutes: 120, maxSessions: 50, maxActiveJobs: 2, maxParses: 2 };
 
 /** A school login that answers for whoever signs in, without any OA. */
 const fakeLogin = async username => {
@@ -165,27 +165,51 @@ test('local: one shared session for every tab, as before; the .env account is of
   assert.equal((await proxied(app.server.address().port, 'GET', '/api/session', { host: 'reim.test' })).status, 403, 'only this computer');
 });
 
-test('job service: different owners run at once, one owner\'s jobs one after another', async () => {
+test('job service: HTTP jobs of different users all run at once; browser jobs are capped; one user\'s jobs stay in order', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-user-jobs-'));
   try {
     const store = new JobStore(path.join(dataDir, 'jobs'));
     const running = [];
-    const launcher = (request, onEvent, onExit) => { running.push({ owner: request.job.ownerId, onExit }); return { stop() {} }; };
-    const service = new JobService(store, { review: async () => ({}) }, false, launcher, 60_000, undefined, 2);
-    const demo = { mode: 'demo', input: { fundingKindKeyword: '被授权的项目', fundingKeyword: 'P001', budgetKeyword: '委托服务费', amount: '10',
-      attachmentCount: 1, payeeCode: '900001', purpose: '测试' } };
-    const make = async owner => (await service.create(demo, {}, owner)).id;
-    const a1 = await make('a'), a2 = await make('a'), b1 = await make('b'), c1 = await make('c');
-    for (const [id, owner] of [[a1, 'a'], [a2, 'a'], [b1, 'b'], [c1, 'c']]) service.start(id, { confirmed: true }, undefined, owner);
-    assert.deepEqual(running.map(item => item.owner), ['a', 'b'], 'a and b at once; a\'s second waits for a\'s first, c for room');
-    assert.equal(service.running, 2);
+    const launcher = (request, onEvent, onExit) => { running.push({ owner: request.job.ownerId, id: request.job.id, onExit }); return { stop() {} }; };
+    // Jobs whose purpose says 浏览器 stand for ones that start a browser; the rest go over HTTP.
+    const heavy = job => job.input.purpose === '浏览器';
+    const service = new JobService(store, { review: async () => ({}) }, false, launcher, 60_000, undefined, 1, heavy);
+    const demo = purpose => ({ mode: 'demo', input: { fundingKindKeyword: '被授权的项目', fundingKeyword: 'P001', budgetKeyword: '委托服务费',
+      amount: '10', attachmentCount: 1, payeeCode: '900001', purpose } });
+    const make = async (owner, purpose = '接口') => {
+      const id = (await service.create(demo(purpose), {}, owner)).id;
+      return { id, owner };
+    };
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    const owners = () => running.map(item => item.owner);
+    const a1 = await make('a'), b1 = await make('b'), c1 = await make('c'), d1 = await make('d'), a2 = await make('a');
+    for (const job of [a1, b1, c1, d1, a2]) service.start(job.id, { confirmed: true }, undefined, job.owner);
+    assert.deepEqual(owners(), ['a', 'b', 'c', 'd'], 'four users at once over HTTP, no global cap; a\'s second waits for a\'s first');
+    assert.equal(service.running, 4);
     running[0].onExit();
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(running.map(item => item.owner), ['a', 'b', 'a'], 'a\'s second follows a\'s first before c (queue order, a free)');
-    running[1].onExit();
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(running.map(item => item.owner), ['a', 'b', 'a', 'c']);
-    assert.throws(() => service.cancel(c1, 'a'), { status: 404 }, 'one owner cannot stop another\'s job');
+    await settle();
+    assert.deepEqual(owners(), ['a', 'b', 'c', 'd', 'a'], 'a\'s second follows its first');
+
+    // Browser jobs: at most maxActive (1) at once, and a waiting one holds back its owner's later jobs only.
+    const e1 = await make('e', '浏览器'), f1 = await make('f', '浏览器'), f2 = await make('f'), g1 = await make('g');
+    for (const job of [e1, f1, f2, g1]) service.start(job.id, { confirmed: true }, undefined, job.owner);
+    assert.deepEqual(owners().slice(5), ['e', 'g'], 'f waits for the browser slot, f\'s HTTP job waits behind it, g runs');
+    running.find(item => item.id === e1.id).onExit();
+    await settle();
+    assert.deepEqual(owners().slice(5), ['e', 'g', 'f'], 'the freed slot goes to f');
+    assert.throws(() => service.cancel(g1.id, 'a'), { status: 404 }, 'one owner cannot stop another\'s job');
     service.shutdown();
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('limiter: at most N tasks at once, the rest in order', async () => {
+  const { Limiter } = require('../dist/server/sessions');
+  const limiter = new Limiter(2);
+  let now = 0, peak = 0;
+  const order = [];
+  const task = name => limiter.run(async () => { peak = Math.max(peak, ++now); await new Promise(r => setTimeout(r, 5)); order.push(name); now--; });
+  await Promise.all(['a', 'b', 'c', 'd'].map(task));
+  assert.equal(peak, 2);
+  assert.deepEqual(order.slice(0, 2).sort(), ['a', 'b']);
+  assert.equal(new Limiter(0).run(async () => 'unlimited') instanceof Promise, true);
 });

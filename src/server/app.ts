@@ -2,7 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { AppError, object } from '../domain/job';
+import { AppError, object, type Job } from '../domain/job';
 import { buildItinerary, sanitizeItems } from '../domain/itinerary';
 import { parseItineraryFile } from '../infrastructure/itinerary-files';
 
@@ -16,7 +16,7 @@ import { OaApi, handleOaRoute } from './oa-api';
 import { Created, type FormContext } from './form-routes';
 import { pagePath } from './page-path';
 import type { Deployment } from './deployment';
-import { equalSecret, SessionRegistry } from './sessions';
+import { equalSecret, Limiter, SessionRegistry } from './sessions';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
  * / redirects here. */
@@ -66,7 +66,10 @@ export interface AppOptions {
 }
 
 export function createApp(options: AppOptions) {
-  const deployment: Deployment = options.deployment ?? { mode: 'local', origins: [], trustProxy: false, idleMinutes: 120, maxSessions: 1, maxActiveJobs: 1 };
+  const deployment: Deployment = options.deployment ?? { mode: 'local', origins: [], trustProxy: false, idleMinutes: 120, maxSessions: 1,
+    maxActiveJobs: 1, maxParses: 0 };
+  /** 票据 parsing (OCR of scans takes a CPU core for seconds): at most maxParses at once, the rest wait their turn. */
+  const parses = new Limiter(deployment.maxParses);
   const shared = deployment.mode === 'local';
   const store = new JobStore(path.join(options.dataDir, 'jobs'));
   store.recover(shared ? LOCAL_OWNER : undefined);
@@ -86,12 +89,17 @@ export function createApp(options: AppOptions) {
     if (!api) throw new AppError(401, '该任务所属的登录已结束。');
     return api;
   };
-  // Filling runs over HTTP; submission has not been mapped to requests yet, so a browser submits the saved form.
+  /** A page job filled over HTTP on the page's login; any other runs in a browser worker (a child process). */
+  const overHttp = (job: Job, sessionStateFile?: string) => job.mode === 'live' && Boolean(sessionStateFile) && process.env.OA_HTTP_FILL !== 'false';
   const launcher: LaunchWorker = options.launcher || ((request, onEvent, onExit) =>
-    request.job.mode === 'live' && request.sessionStateFile && process.env.OA_HTTP_FILL !== 'false'
+    overHttp(request.job, request.sessionStateFile)
       ? apiFor(request.job.ownerId).fillJob(request, onEvent, onExit, launchWorker) : launchWorker(request, onEvent, onExit));
+  // Only jobs that start a browser count against REIM_MAX_ACTIVE_JOBS: a worker process, or OA_HTTP_SUBMIT=false
+  // handing the saved form to one for 提交. HTTP jobs mostly wait on OA and run for every user at once.
+  const heavy = (job: Job, sessionStateFile?: string) => !overHttp(job, sessionStateFile)
+    || (job.action === 'submit' && process.env.OA_HTTP_SUBMIT === 'false');
   const service = new JobService(store, options.advisor || new DeepSeekAdvisor(options.deepSeekKey || ''),
-    options.liveEnabled === true, launcher, options.timeoutMs, options.siteProfile, deployment.maxActiveJobs);
+    options.liveEnabled === true, launcher, options.timeoutMs, options.siteProfile, deployment.maxActiveJobs, heavy);
   const publicDir = options.publicDir || path.resolve(__dirname, '../../public');
   // The page's modules, one per shared part and per 报销类型 (see public/js/main.js): every public/js/*.js, so a new
   // 报销类型's module is served without listing it here. Only plain names; nothing below public/js.
@@ -166,7 +174,8 @@ export function createApp(options: AppOptions) {
             || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data.base64)) {
             throw new AppError(400, '附件编码无效或超过 8 MB。');
           }
-          return json(200, { items: await parseItineraryFile(data.name.trim(), Buffer.from(data.base64, 'base64')) });
+          const name = data.name.trim(), bytes = Buffer.from(data.base64, 'base64');
+          return json(200, { items: await parses.run(() => parseItineraryFile(name, bytes)) });
         }
         if (req.method === 'POST' && url.pathname === '/api/travel/itinerary') {
           const items = sanitizeItems(object(await readJson(req)).items);

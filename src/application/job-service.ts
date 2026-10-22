@@ -174,15 +174,18 @@ function discardSessionFile(file: string | undefined): void {
 
 export class JobService {
   private queue: Array<{ id: string; ownerId: string; credentials?: Credentials; sessionStateFile?: string }> = [];
-  /** Running jobs: at most `maxActive` at once, and one per owner (one school login takes one request at a time). */
-  private active = new Map<string, { ownerId: string; worker: ReturnType<LaunchWorker>; timer: NodeJS.Timeout }>();
+  /** Running jobs: one per owner (one school login takes one request at a time); `heavy` ones (a browser or a child
+   * process) also at most `maxActive` at once. Jobs over HTTP mostly wait on OA, so they are not capped. */
+  private active = new Map<string, { ownerId: string; heavy: boolean; worker: ReturnType<LaunchWorker>; timer: NodeJS.Timeout }>();
   private reviewInFlight = new Set<string>();
   private planInFlight = new Set<string>();
   private closing = false;
 
   constructor(readonly store: JobStore, readonly advisor: Advisor, readonly liveEnabled: boolean,
     private readonly launcher: LaunchWorker = launchWorker, private readonly timeoutMs = 20 * 60_000,
-    readonly siteProfile?: SiteProfile, private readonly maxActive = 1) {}
+    readonly siteProfile?: SiteProfile, private readonly maxActive = 1,
+    /** Whether a job will run in a browser or child process (counted against maxActive); by default every job is. */
+    private readonly isHeavy: (job: Job, sessionStateFile?: string) => boolean = () => true) {}
 
   /** `folder`: OA folder invoices the server has just read; an `invoices` item `{ folderId, number }` must be one of them. */
   /** `ownerId`: whose job it is (the school account on a shared server, 'local' on one's own computer). */
@@ -389,17 +392,30 @@ export class JobService {
     });
   }
 
-  /** Starts queued jobs while there is room: in queue order, skipping an owner who already has one running. */
+  /** Starts every queued job that may run now, in queue order: its owner has none running and, for a heavy job,
+   * fewer than `maxActive` heavy ones run. A job that must wait does not hold back the jobs of other owners. */
   private pump(): void {
-    while (!this.closing && this.active.size < this.maxActive) {
-      const busy = new Set([...this.active.values()].map(item => item.ownerId));
-      const at = this.queue.findIndex(item => !busy.has(item.ownerId));
-      if (at < 0) return;
-      this.launch(this.queue.splice(at, 1)[0]);
+    if (this.closing) return;
+    const busy = new Set([...this.active.values()].map(item => item.ownerId));
+    let heavy = [...this.active.values()].filter(item => item.heavy).length;
+    for (const next of [...this.queue]) {
+      if (busy.has(next.ownerId)) continue;
+      const isHeavy = this.heavyJob(next);
+      // Run or wait, the owner's later jobs stay behind this one.
+      busy.add(next.ownerId);
+      if (isHeavy && heavy >= this.maxActive) continue;
+      if (isHeavy) heavy++;
+      this.queue.splice(this.queue.indexOf(next), 1);
+      this.launch(next, isHeavy);
     }
   }
 
-  private launch(next: JobService['queue'][number]): void {
+  private heavyJob(next: JobService['queue'][number]): boolean {
+    try { return this.isHeavy(this.store.get(next.id, next.ownerId), next.sessionStateFile); }
+    catch { return true; }
+  }
+
+  private launch(next: JobService['queue'][number], heavy: boolean): void {
     const owner = next.ownerId;
     const job = this.store.update(next.id, owner, current => {
       current.status = 'running';
@@ -498,7 +514,7 @@ export class JobService {
         else worker.stop();
       }, this.timeoutMs);
       timer.unref();
-      this.active.set(job.id, { ownerId: owner, worker, timer });
+      this.active.set(job.id, { ownerId: owner, heavy, worker, timer });
     } catch { onEvent({ type: 'failure' }); onExit(); }
     // Neither credentials nor raw automation logs are persisted or returned by the API.
     next.credentials = undefined;

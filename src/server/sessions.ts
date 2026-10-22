@@ -96,3 +96,21 @@ export class SessionRegistry {
     if (this.sweeper) clearInterval(this.sweeper);
   }
 }
+
+/** At most `max` tasks at once (0 = no limit); the others wait in order. */
+export class Limiter {
+  private running = 0;
+  private waiting: Array<() => void> = [];
+
+  constructor(private readonly max: number) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.max > 0 && this.running >= this.max) await new Promise<void>(resolve => this.waiting.push(resolve));
+    this.running++;
+    try { return await task(); }
+    finally {
+      this.running--;
+      this.waiting.shift()?.();
+    }
+  }
+}

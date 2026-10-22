@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 /** How the server is reached. 'local' (the default): one person on their own computer at 127.0.0.1, exactly
  * as before. 'server': several people through a reverse proxy (nginx), each browser with a session of its own
  * (see docs/deployment.md). Read once at start from the environment. */
@@ -11,8 +13,11 @@ export interface Deployment {
   idleMinutes: number;
   /** Most browser sessions held at once; the oldest idle one gives way. */
   maxSessions: number;
-  /** Jobs (用款申请单 fills) running at once across users; each user still runs one at a time. */
+  /** Jobs that start a browser (OA_HTTP_FILL/OA_HTTP_SUBMIT=false, demo) running at once across users. Jobs over
+   * HTTP are not capped; each user still runs one job at a time. */
   maxActiveJobs: number;
+  /** 票据 parsed at once (OCR of scans is CPU-bound); 0 = no limit. */
+  maxParses: number;
 }
 
 export class DeploymentError extends Error {}
@@ -39,5 +44,6 @@ export function deploymentFromEnv(env: NodeJS.ProcessEnv = process.env): Deploym
   return { mode, origins: mode === 'server' ? origins : [], trustProxy: mode === 'server' && env.REIM_TRUST_PROXY !== 'false',
     idleMinutes: number('REIM_SESSION_IDLE_MINUTES', 120, 5, 24 * 60),
     maxSessions: number('REIM_MAX_SESSIONS', mode === 'server' ? 200 : 1, 1, 10_000),
-    maxActiveJobs: number('REIM_MAX_ACTIVE_JOBS', mode === 'server' ? 4 : 1, 1, 64) };
+    maxActiveJobs: number('REIM_MAX_ACTIVE_JOBS', mode === 'server' ? 2 : 1, 1, 64),
+    maxParses: number('REIM_MAX_PARSES', mode === 'server' ? Math.max(1, os.cpus().length - 1) : 0, 0, 256) };
 }
