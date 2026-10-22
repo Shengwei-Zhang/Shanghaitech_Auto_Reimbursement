@@ -1,6 +1,6 @@
 # 报销助手 · Reimbursement Copilot
 
-上海科技大学 OA 报销的本机助手。npm 包名 `reimbursement-copilot`，GitHub 仓库 `Shanghaitech_Reimbursement_Copilot`（`dev` 开发分支、`main` 部署分支，见下文“分支与发布”）。
+上海科技大学 OA 报销的本机助手。npm 包名 `reimbursement-copilot`，GitHub 仓库 `Shanghaitech_Reimbursement_Copilot`（`dev` 开发分支、`deploy` 部署分支，见下文“分支与发布”）。
 
 本机运行的报销工具，服务固定监听 `127.0.0.1`，面向单人使用。主路径是**一键报销页面**：后台直接向学校服务器登录（统一身份认证 → 门户 → BPM），再按浏览器操作时实际发出的请求顺序调用 OA 接口，完成**用款申请单**和**境内差旅单**的填写、保存和提交流转，**全程不打开浏览器**；另有**报销单打印**页面，批量打印或下载已提交报销单的打印件。Playwright 浏览器执行器（接口方式的备用路径）、批次草稿和各类查询命令仍然保留；原来的报销管理页面（首页 `/`）已移除，首页直接跳转到一键报销页面。
 
@@ -212,16 +212,17 @@ node --test tests/http-login.test.cjs tests/http-bpm.test.cjs tests/http-fill.te
 | 分支 | 作用 | 更新方式 |
 | --- | --- | --- |
 | `dev` | 开发分支 | 每次同步一个提交 |
-| `main` | 部署分支，部署时使用 | 发布时快进到 `dev`：部署的内容一定先同步到过 `dev` |
+| `deploy` | 部署分支，部署时使用 | 发布时快进到 `dev`：部署的内容一定先同步到过 `dev` |
+| `main` | GitHub 默认分支（不加 `-b` 克隆时得到的），始终与 `deploy` 相同 | 随 `deploy` 一起更新 |
 
 GitHub 上的代码是**脱敏后的发布副本**：测试夹具和文档中的真实姓名、工号、报销单号、携程订单号、经费与部门编号都已换成同格式的占位值，提交作者为 `Reimbursement Copilot`，不含开发历史。每次同步前先检查是否残留个人信息（手机号、身份证号、邮箱、真实格式的单号等），并在脱敏副本中运行全部测试，任一不通过即不发布。含真实信息的完整开发历史只保存在本机开发仓库，不推送到 GitHub。
 
 开发版和发布版的页面地址不同：本机开发仓库为 `/Reim-Copilot`，GitHub 上的发布副本为 `/Reim-Copilot`（发布时替换）。两者都会把 `/`、`/easy`、`/easy-v2` 跳转到自己的页面。
 
-部署时克隆 `main`：
+部署时克隆 `deploy`：
 
 ```bash
-git clone -b main <仓库地址> reimbursement-copilot
+git clone -b deploy <仓库地址> reimbursement-copilot
 cd reimbursement-copilot && npm ci && cp .env.example .env   # 在 .env 中设置 OA_LIVE_ENABLED=true 才能真实办单
 npm start
 ```
