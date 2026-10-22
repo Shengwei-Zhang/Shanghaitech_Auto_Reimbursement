@@ -416,3 +416,17 @@ test('adding a payee keeps the first one\'s amount: it takes what the others lea
   await page.click('#line-add');
   await expect(page.locator('#line-rows tr').nth(0).locator('input.num')).toHaveValue('1000.00');
 });
+
+test('the login page explains the project, and every page has the footer', async ({ page }) => {
+  await page.goto(PAGE_PATH);
+  await expect(page.locator('.login-card .about')).toHaveText('本项目旨在帮助各位同事更加便捷地制作各种报销单。通过封装真实的 egate 数据接口，减少繁琐、冗余的操作，提高办公效率。');
+  await expect(page.locator('.site-footer')).toBeVisible();
+  await expect(page.locator('.site-footer')).toContainText('实现高效的办公。');
+  // The address comes from REIM_CONTACT_EMAIL (help@reimbursement-copilot.invalid for the test server).
+  await expect(page.locator('#footer-contact')).toHaveText('有任何问题请邮件联系 help@reimbursement-copilot.invalid。');
+  await expect(page.locator('#footer-email')).toHaveAttribute('href', 'mailto:help@reimbursement-copilot.invalid');
+  for (const path of ['/print-list', '/admin']) {
+    await page.goto(path);
+    await expect(page.locator('.site-footer')).toContainText('本项目旨在帮助各位同事便捷制作各种报销单');
+  }
+});

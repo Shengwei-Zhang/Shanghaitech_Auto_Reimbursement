@@ -11,7 +11,8 @@
     <form id="login-form" class="login-card">
       <div class="brand"><span class="mark">报</span><div><strong>报销助手</strong><small>Reimbursement Copilot · 上海科技大学</small></div></div>
       <h1>登录学校 OA</h1>
-      <p class="hint">使用统一身份认证的学号/工号和密码。登录由本机后台直接向学校服务器发起，密码只用于这一次登录，不会保存。</p>
+      <p class="hint about">本项目旨在帮助各位同事更加便捷地制作各种报销单。通过封装真实的 egate 数据接口，减少繁琐、冗余的操作，提高办公效率。</p>
+      <p class="hint small">使用统一身份认证的学号/工号和密码登录；密码只用于这一次登录，不会保存。</p>
       <label>学号/工号<input id="username" autocomplete="username" required maxlength="32"></label>
       <label>密码<input id="password" type="password" autocomplete="current-password" required maxlength="128"></label>
       <div id="captcha-row" class="captcha-row" hidden>
@@ -286,5 +287,9 @@
   </div>
   <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text" data-pending="正在处理" data-pending-shown="正在处理">正在处理</span></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <footer class="site-footer">
+    <p>本项目旨在帮助各位同事便捷制作各种报销单。通过封装真实的 egate 数据接口，减少繁琐、冗余的操作，实现高效的办公。<span id="footer-contact" hidden>有任何问题请邮件联系 <a id="footer-email" href=""></a>。</span></p>
+  </footer>
+  <script src="/footer.js" defer></script>
 </body>
 </html>

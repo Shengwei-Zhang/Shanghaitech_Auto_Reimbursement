@@ -12,7 +12,9 @@ export default defineConfig({
   },
   webServer: {
     command: `"${process.execPath}" dist/server/main.js`, url: 'http://127.0.0.1:4318', reuseExistingServer: false,
-    env: { PORT: '4318', OA_DATA_DIR: path.resolve('test-results/web-data'), OA_LIVE_ENABLED: 'false', DEEPSEEK_API_KEY: '' },
+    // Fixed here, so the local .env (dotenv never overrides a set variable) does not change what the tests see.
+    env: { PORT: '4318', OA_DATA_DIR: path.resolve('test-results/web-data'), OA_LIVE_ENABLED: 'false', DEEPSEEK_API_KEY: '',
+      REIM_DEPLOYMENT: 'local', REIM_ADMIN_ACCOUNTS: '', REIM_CONTACT_EMAIL: 'help@reimbursement-copilot.invalid' },
   },
   outputDir: 'test-results/browser',
 });

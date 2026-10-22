@@ -348,3 +348,12 @@ main > * { min-width:0; }
 .admin-table td.num, .admin-table th.num { text-align:right; font-family:var(--mono); }
 #admin-refresh { cursor:pointer; }
 #login-failures, #admin-days > .hint { margin-top:12px; }
+
+/* The footer of every page; the login screen and the app share the height above it. */
+body { min-height:100vh; display:flex; flex-direction:column; }
+body > #app, body > .login-screen { flex:1 0 auto; }
+.login-screen { min-height:0; }
+.login-card .hint.about { color:var(--ink); }
+.site-footer { margin-top:auto; padding:14px 16px 18px; border-top:1px solid var(--line); text-align:center; color:var(--muted); font-size:12px; line-height:1.7; }
+.site-footer p { margin:0 auto; max-width:900px; }
+.site-footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; }

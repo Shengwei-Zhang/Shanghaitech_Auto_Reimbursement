@@ -288,3 +288,19 @@ test('job service: each job\'s end is reported once, a job stopped in the queue 
     service.shutdown();
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('footer: the same text on every page; the contact comes from REIM_CONTACT_EMAIL and needs no session', async t => {
+  assert.equal(deploymentFromEnv({ REIM_CONTACT_EMAIL: ' a.b@reimbursement-copilot.invalid ' }).contact, 'a.b@reimbursement-copilot.invalid');
+  assert.throws(() => deploymentFromEnv({ REIM_CONTACT_EMAIL: 'not an address' }), /邮箱/);
+  const { port } = await serverApp(t, { deployment: { ...SERVER, contact: 'help@reimbursement-copilot.invalid' } });
+  const site = await proxied(port, 'GET', '/site.json');
+  assert.deepEqual(site.data, { contact: 'help@reimbursement-copilot.invalid' });
+  assert.equal(site.headers['set-cookie'], undefined, 'no session is opened for the footer');
+  for (const file of ['easy-v2.html', 'print-list.html', 'admin.html']) {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', file), 'utf8');
+    assert.match(html, /<footer class="site-footer">[\s\S]*本项目旨在帮助各位同事便捷制作各种报销单。通过封装真实的 egate 数据接口/, file);
+    assert.match(html, /<script src="\/footer.js" defer><\/script>/, file);
+    assert.ok(!/@/.test(html.replace(/<[^>]+>/g, '')), `${file}: no address in the page itself`);
+  }
+  assert.equal((await proxied(port, 'GET', '/footer.js')).status, 200);
+});

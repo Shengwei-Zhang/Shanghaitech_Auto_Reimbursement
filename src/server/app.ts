@@ -35,6 +35,7 @@ const STATIC_FILES: Record<string, [string, string]> = {
   // Usage statistics: the page is public, its data (GET /api/admin/stats) only for the administrator.
   '/admin': ['admin.html', 'text/html; charset=utf-8'],
   '/admin.js': ['admin.js', 'text/javascript; charset=utf-8'],
+  '/footer.js': ['footer.js', 'text/javascript; charset=utf-8'],
 };
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -155,6 +156,8 @@ export function createApp(options: AppOptions) {
       if (req.headers['sec-fetch-site'] === 'cross-site') throw new AppError(403, '不接受跨站请求。');
       const url = new URL(req.url || '/', here);
       const cookie = (req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith('oa_session='))?.slice(11) || '';
+      // What every page's footer shows; needs no session, so it never opens one.
+      if (req.method === 'GET' && url.pathname === '/site.json') return json(200, { contact: deployment.contact ?? '' });
       if (req.method === 'GET' && url.pathname === '/api/session') {
         const session = sessions.open(cookie);
         res.setHeader('Set-Cookie', `oa_session=${session.id}; HttpOnly; SameSite=Strict; Path=/${shared ? '' : '; Secure'}`);

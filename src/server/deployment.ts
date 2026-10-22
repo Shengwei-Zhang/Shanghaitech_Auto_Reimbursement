@@ -20,6 +20,8 @@ export interface Deployment {
   maxParses: number;
   /** School accounts that may open the usage statistics (/admin). Empty: nobody on a server; the one user locally. */
   admins: string[];
+  /** Contact address shown in every page's footer (REIM_CONTACT_EMAIL); kept out of the code. Empty: none shown. */
+  contact?: string;
 }
 
 export class DeploymentError extends Error {}
@@ -48,7 +50,13 @@ export function deploymentFromEnv(env: NodeJS.ProcessEnv = process.env): Deploym
     maxSessions: number('REIM_MAX_SESSIONS', mode === 'server' ? 200 : 1, 1, 10_000),
     maxActiveJobs: number('REIM_MAX_ACTIVE_JOBS', mode === 'server' ? 2 : 1, 1, 64),
     maxParses: number('REIM_MAX_PARSES', mode === 'server' ? Math.max(1, os.cpus().length - 1) : 0, 0, 256),
-    admins: admins(env.REIM_ADMIN_ACCOUNTS) };
+    admins: admins(env.REIM_ADMIN_ACCOUNTS), contact: contact(env.REIM_CONTACT_EMAIL) };
+}
+
+function contact(value: string | undefined): string {
+  const address = (value ?? '').trim();
+  if (address && !/^[\w.+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(address)) throw new DeploymentError('REIM_CONTACT_EMAIL 不是有效的邮箱地址。');
+  return address;
 }
 
 function admins(value: string | undefined): string[] {
