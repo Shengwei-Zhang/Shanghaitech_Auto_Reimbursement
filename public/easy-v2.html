@@ -45,8 +45,16 @@
       <form id="claim" class="card" novalidate>
         <section class="overview panel" aria-label="本单概览">
           <div class="overview-head">
-            <p id="claim-eyebrow" class="eyebrow">用款申请单 · 新建</p>
-            <h2 id="claim-title">填写用款申请单</h2>
+            <label for="claim-type" class="eyebrow">报销类型 · <span id="claim-eyebrow">新建</span></label>
+            <select id="claim-type" class="type-select" required>
+              <option value="用款申请单" selected>用款申请单</option>
+              <option disabled>用车报销单（暂未开放）</option>
+              <option disabled>采购预付及报销单（暂未开放）</option>
+              <option disabled>预付账款单（暂未开放）</option>
+              <option value="境内差旅单">境内差旅单</option>
+              <option disabled>因公出国（境）单（暂未开放）</option>
+            </select>
+            <h2 id="claim-title" class="sr-only">填写用款申请单</h2>
             <p id="claim-subtitle" class="mono small"></p>
           </div>
           <dl id="claim-stats" class="stats"></dl>
@@ -56,16 +64,6 @@
         <fieldset id="section-basics">
           <legend>单据与经费</legend>
           <div class="hrow hrow-form">
-            <label class="field">报销类型
-              <select id="claim-type" required>
-                <option value="用款申请单" selected>用款申请单</option>
-                <option disabled>用车报销单（暂未开放）</option>
-                <option disabled>采购预付及报销单（暂未开放）</option>
-                <option disabled>预付账款单（暂未开放）</option>
-                <option value="境内差旅单">境内差旅单</option>
-                <option disabled>因公出国（境）单（暂未开放）</option>
-              </select>
-            </label>
             <div class="field" data-claim="用款申请单">用款申请单
               <div class="with-button">
                 <select id="form-select" required aria-label="用款申请单"></select>

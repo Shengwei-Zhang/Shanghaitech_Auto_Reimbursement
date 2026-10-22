@@ -13,7 +13,7 @@ import { initItinerary, resetItinerary } from './itinerary.js';
 function refreshOverview() {
   const view = currentForm()?.overview?.();
   if (!view) return;
-  $('claim-eyebrow').textContent = view.eyebrow;
+  $('claim-eyebrow').textContent = view.eyebrow.split(' · ').pop();
   $('crumb').textContent = `报销 / ${view.eyebrow.replace(' · ', ' / ')}`;
   $('claim-subtitle').textContent = view.subtitle ?? '';
   $('claim-stats').replaceChildren(...view.stats.map(stat => {
