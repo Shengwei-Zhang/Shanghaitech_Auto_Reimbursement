@@ -8,7 +8,7 @@ V4 将原有 TypeScript/Playwright 报销脚本隔离为校园 OA 适配层，�
 
 ```mermaid
 flowchart LR
-  Web[一键报销页面 /easy-v2] --> API[本地 HTTP API]
+  Web[报销助手页面 /Reim-Copilot] --> API[本地 HTTP API]
   API --> Service[任务服务与规则预检]
   Batch[批次清单检查与草稿 CLI] --> Service
   Service --> Store[本地任务与版本化方案文件]

@@ -15,6 +15,12 @@ import type { SiteProfile } from '../domain/workflow';
 import { CONTRACTS } from '../automation/contracts';
 import { OaApi, handleOaRoute } from './oa-api';
 
+/** The page's address. The development repository serves /Reim-Copilot; the published copy (scripts/export-deploy.mjs)
+ * serves /Reim-Copilot. Every other entry point redirects here. */
+export const PAGE_PATH = '/Reim-Copilot';
+/** Addresses the page had before; bookmarks of them land on PAGE_PATH. */
+const OLD_PAGE_PATHS = new Set(['/', '/easy', '/easy-v2']);
+
 const MAX_BODY = 12 * 1024 * 1024;
 const STATIC_FILES: Record<string, [string, string]> = {
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
@@ -22,7 +28,7 @@ const STATIC_FILES: Record<string, [string, string]> = {
   // The Easy page's modules, one per shared part and per 报销类型 (see public/js/main.js).
   ...Object.fromEntries(['core', 'login', 'funding', 'invoices', 'apply-money', 'travel', 'itinerary', 'main']
     .map(name => [`/js/${name}.js`, [`js/${name}.js`, 'text/javascript; charset=utf-8'] as [string, string]])),
-  '/easy-v2': ['easy-v2.html', 'text/html; charset=utf-8'],
+  [PAGE_PATH]: ['easy-v2.html', 'text/html; charset=utf-8'],
   '/easy-v2.css': ['easy-v2.css', 'text/css; charset=utf-8'],
   '/print.js': ['print.js', 'text/javascript; charset=utf-8'],
   '/print-list': ['print-list.html', 'text/html; charset=utf-8'],
@@ -254,10 +260,9 @@ export function createApp(options: AppOptions) {
         }
         throw new AppError(404, '接口或任务不存在。');
       }
-      // The old workbench page is gone; the one-page reimbursement is the only UI.
-      // /easy was the single-column page; it is retired, and old bookmarks land on /easy-v2.
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/easy')) {
-        res.writeHead(302, { Location: '/easy-v2' });
+      // The one-page reimbursement is the only UI; its old addresses (/easy, /easy-v2) and / land on it.
+      if (req.method === 'GET' && OLD_PAGE_PATHS.has(url.pathname)) {
+        res.writeHead(302, { Location: PAGE_PATH });
         return res.end();
       }
       const file = STATIC_FILES[url.pathname];

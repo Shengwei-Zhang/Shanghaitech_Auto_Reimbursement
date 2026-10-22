@@ -60,7 +60,7 @@ function needLogin(text) {
   $('print-refresh').disabled = false;
   show(text, true);
   const link = document.createElement('a');
-  link.href = '/easy-v2';
+  link.href = '/'; // redirects to the page, whatever its address
   link.textContent = '前往一键报销页面登录';
   $('message').append(document.createTextNode(' '), link);
   $('print-status').textContent = '';

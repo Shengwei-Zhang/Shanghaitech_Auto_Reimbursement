@@ -57,7 +57,7 @@ D209900000037 的抓包显示，差旅单点击“提交”发出的请求与用
 
 ## Easy 页面
 
-`/easy-v2` 的“报销类型”选“境内差旅单”后：
+页面的“报销类型”选“境内差旅单”后：
 
 - **单据**：“＋ 新建境内差旅单”，或复用空白差旅单。列表来自 `GET /api/oa/travel/forms`：报销单查询中本人状态为预制、`reimbursementKind=domesticTravel`、内容列全空的单据。选中后按单号经 `resolveListTargetHttp` 取得申请环节任务再打开；填写前 `fillTravelFormHttp` 仍会核对本单没有出差人、经费、冲借款和发票。
 - **预算项**：`GET /api/oa/travel/budgets?fundingCode=…`（差旅单自己的查询，`reimbursementKind=domesticTravel`）。预算行随报销类型不同，例如 2099F9999-000-01 在差旅单下只有 4 项（市内交通/参会费、境内专家来访差旅费、国内差旅/参会费、招聘费用）。
@@ -71,7 +71,7 @@ D209900000037 的抓包显示，差旅单点击“提交”发出的请求与用
 
 ## 行程附件（`src/domain/itinerary.ts`、`src/infrastructure/itinerary-files.ts`）
 
-`/easy-v2` 差旅单的“发票”之后是“行程附件”：拖入或选择火车票、机票（携程订单页）、酒店水单、会议通知等文件（PDF、Word、PNG/JPEG）。每个文件经 `POST /api/travel/parse`（`{ name, base64 }`，≤ 8 MB）在本机内存中解析，**不写入磁盘、不发给 OA 或任何外部服务**；“发票”中已加入的 PDF 也一并解析（住宿、会务金额计入行程）。`POST /api/travel/itinerary`（`{ items }`，逐字段复核）把解析结果整理成行程，页面先展示预览和需要核对的提示，点击“填入出差人与行程”才写入出差人表格（之后仍可手工修改，保存和提交走原有流程）。
+页面上差旅单的“发票”之后是“行程附件”：拖入或选择火车票、机票（携程订单页）、酒店水单、会议通知等文件（PDF、Word、PNG/JPEG）。每个文件经 `POST /api/travel/parse`（`{ name, base64 }`，≤ 8 MB）在本机内存中解析，**不写入磁盘、不发给 OA 或任何外部服务**；“发票”中已加入的 PDF 也一并解析（住宿、会务金额计入行程）。`POST /api/travel/itinerary`（`{ items }`，逐字段复核）把解析结果整理成行程，页面先展示预览和需要核对的提示，点击“填入出差人与行程”才写入出差人表格（之后仍可手工修改，保存和提交走原有流程）。
 
 | 附件 | 读取方式 | 得到 |
 |---|---|---|

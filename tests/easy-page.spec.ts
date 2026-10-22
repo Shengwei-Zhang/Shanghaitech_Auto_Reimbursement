@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { PAGE_PATH } from '../src/server/app';
 
-/** The Easy page (/easy-v2) in a real browser. Every /api call is answered here, so the page runs
+/** The Easy page (PAGE_PATH) in a real browser. Every /api call is answered here, so the page runs
  * against the shapes the server returns without a school login; the server only serves the files. */
 
 const FUNDS = { total: 2, pageCount: 1, items: [
@@ -48,7 +49,7 @@ async function openPage(page: Page): Promise<Stub> {
     }
   });
   page.on('dialog', dialog => dialog.accept());
-  await page.goto('/easy-v2');
+  await page.goto(PAGE_PATH);
   await page.fill('#username', '900001');
   await page.fill('#password', 'any');
   await page.click('#login-button');
@@ -62,9 +63,11 @@ async function choose(page: Page, select: string, value: string) {
   await page.locator(select).selectOption(value, { force: true });
 }
 
-test('/easy is retired and lands on /easy-v2, which loads as ES modules', async ({ page }) => {
-  await page.goto('/easy');
-  await expect(page).toHaveURL(/\/easy-v2$/);
+test('old addresses land on the page, which loads as ES modules', async ({ page }) => {
+  for (const old of ['/', '/easy', '/easy-v2']) {
+    await page.goto(old);
+    await expect(page).toHaveURL(new RegExp(`${PAGE_PATH}$`));
+  }
   await expect(page.locator('script[type="module"][src="/js/main.js"]')).toHaveCount(1);
 });
 

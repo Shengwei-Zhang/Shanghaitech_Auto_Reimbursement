@@ -6,7 +6,7 @@ import { initApplyMoney } from './apply-money.js';
 import { initTravel } from './travel.js';
 import { initItinerary, resetItinerary } from './itinerary.js';
 
-/** The Easy page (/easy-v2): login, the shared fund picker and invoices, and one module per 报销类型
+/** The Easy page (/Reim-Copilot): login, the shared fund picker and invoices, and one module per 报销类型
  * (apply-money.js 用款申请单, travel.js + itinerary.js 境内差旅单) registered in core.js. */
 
 /** The overview panel, the header crumb and the 提交前检查 bar, from the current form's overview(). */

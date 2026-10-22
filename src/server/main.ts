@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createApp } from './app';
+import { createApp, PAGE_PATH } from './app';
 import { loadSiteProfile } from '../infrastructure/site-profile';
 
 dotenv.config();
@@ -36,7 +36,7 @@ process.once('exit', () => {
 const app = createApp({ dataDir, liveEnabled: process.env.OA_LIVE_ENABLED === 'true', deepSeekKey: process.env.DEEPSEEK_API_KEY,
   siteProfile: loadSiteProfile(process.env.OA_SITE_PROFILE) });
 app.server.once('error', error => { console.error(error.message); process.exitCode = 1; });
-app.server.listen(port, '127.0.0.1', () => console.log(`ShanghaiTech 一键报销：http://127.0.0.1:${port}/easy-v2`));
+app.server.listen(port, '127.0.0.1', () => console.log(`报销助手：http://127.0.0.1:${port}${PAGE_PATH}`));
 const shutdown = () => {
   app.service.shutdown();
   app.server.close();

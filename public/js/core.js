@@ -255,7 +255,7 @@ async function droppedFiles(transfer) {
   return files;
 }
 
-/** `tone`: 'danger' for removing or stopping (red in /easy-v2). */
+/** `tone`: 'danger' for removing or stopping (red on the page). */
 function rowButton(text, onClick, tone = '') {
   const button = document.createElement('button');
   button.type = 'button';

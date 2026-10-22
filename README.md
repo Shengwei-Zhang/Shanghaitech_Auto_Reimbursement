@@ -26,13 +26,13 @@ test -f .env || cp .env.example .env   # 仅首次；已有 .env 时保留
 npm start
 ```
 
-打开 [一键报销页面](http://127.0.0.1:4317/easy-v2)（打开 `http://127.0.0.1:4317` 或已停用的 `/easy` 也会跳转到这里）。
+打开 [报销助手页面](http://127.0.0.1:4317/Reim-Copilot)（开发版地址 `/Reim-Copilot`；GitHub 上的发布版为 `/Reim-Copilot`）。打开 `http://127.0.0.1:4317`、旧地址 `/easy` 或 `/easy-v2` 都会跳转到这里。
 
 图片和扫描件的行程附件需要本机 OCR 模型（约 22 MB，不在仓库中），下载命令见 [境内差旅单](docs/http-travel.md)“本机 OCR”；没有模型时这类附件逐个标为“OCR 不可用”，其余功能不受影响。
 
 已安装依赖时，也可运行 `./scripts/start-local.sh`，或在 macOS 双击 `启动报销助手.command`；脚本依次查找 `OA_NODE_BINARY`、PATH 中的 Node 和本机可用的 Codex Node 运行时，只编译并启动，不安装软件。
 
-## 一键报销（`/easy-v2`）
+## 一键报销（`/Reim-Copilot`，发布版 `/Reim-Copilot`）
 
 页面自上而下：
 
@@ -130,7 +130,7 @@ npm start
 
 | 目标 | 命令 |
 | --- | --- |
-| 一键报销与报销单打印页面 | `npm start`（页面 `/easy-v2`、`/print-list`） |
+| 一键报销与报销单打印页面 | `npm start`（页面 `/Reim-Copilot`（发布版 `/Reim-Copilot`）、`/print-list`） |
 | 无浏览器登录检查（可保存会话） | `npm run oa:login -- [--save-session]` |
 | 无浏览器查询：待办 / 单据目标 / 经费 / 预算科目 | `npm run oa:http -- tasks\|target\|funds\|budgets …` |
 | 浏览器登录与入口检查 | `npm run oa:connect` |
@@ -169,7 +169,7 @@ npm start
 
 ```text
 public/js/                一键报销页面的 ES 模块：core/login/funding/invoices 共用，apply-money（用款申请单）、travel+itinerary（境内差旅单）各自独立，main 接线
-public/easy-v2.html|css   /easy-v2 的页面和样式（easy.css 为基础样式）
+public/easy-v2.html|css   报销助手页面（/Reim-Copilot，发布版 /Reim-Copilot）的页面和样式（easy.css 为基础样式）
 public/print-list.*       报销单打印页面；print.js 为合并后打印页的自动打印脚本
 src/server/oa-api.ts      页面后端：登录、空单、经费/预算、接口办单、报销单打印
 src/automation/http-*.ts  无浏览器登录、BPM 查询、用款申请单接口填写与提交、报销单打印
@@ -215,6 +215,8 @@ node --test tests/http-login.test.cjs tests/http-bpm.test.cjs tests/http-fill.te
 | `main` | 部署分支，部署时使用 | 发布时快进到 `dev`：部署的内容一定先同步到过 `dev` |
 
 GitHub 上的代码是**脱敏后的发布副本**：测试夹具和文档中的真实姓名、工号、报销单号、携程订单号、经费与部门编号都已换成同格式的占位值，提交作者为 `Reimbursement Copilot`，不含开发历史。每次同步前先检查是否残留个人信息（手机号、身份证号、邮箱、真实格式的单号等），并在脱敏副本中运行全部测试，任一不通过即不发布。含真实信息的完整开发历史只保存在本机开发仓库，不推送到 GitHub。
+
+开发版和发布版的页面地址不同：本机开发仓库为 `/Reim-Copilot`，GitHub 上的发布副本为 `/Reim-Copilot`（发布时替换）。两者都会把 `/`、`/easy`、`/easy-v2` 跳转到自己的页面。
 
 部署时克隆 `main`：
 

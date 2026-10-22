@@ -224,8 +224,12 @@ test('easy page API: login, applyMoney forms, select, create, funds and subjects
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => app.server.close(resolve)));
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const retired = await fetch(`${base}/easy`, { redirect: 'manual' });
-  assert.deepEqual([retired.status, retired.headers.get('location')], [302, '/easy-v2'], '/easy is retired');
+  const { PAGE_PATH } = require('../dist/server/app');
+  for (const old of ['/', '/easy', '/easy-v2']) {
+    const moved = await fetch(`${base}${old}`, { redirect: 'manual' });
+    assert.deepEqual([moved.status, moved.headers.get('location')], [302, PAGE_PATH], `${old} lands on the page`);
+  }
+  assert.equal((await fetch(`${base}${PAGE_PATH}`)).status, 200);
   assert.equal((await fetch(`${base}/js/main.js`)).status, 200);
   const session = await fetch(`${base}/api/session`);
   const { csrfToken } = await session.json();

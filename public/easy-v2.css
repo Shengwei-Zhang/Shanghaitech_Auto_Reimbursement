@@ -1,4 +1,4 @@
-/* /easy-v2: easy.css plus a wide, row-based layout and the job list. */
+/* The page (/Reim-Copilot): easy.css plus a wide, row-based layout and the job list. */
 main { max-width:1480px; }
 
 .hrow { display:grid; gap:10px 14px; align-items:end; }

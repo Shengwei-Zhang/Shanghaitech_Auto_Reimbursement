@@ -3,7 +3,7 @@ import { $, balanceText, api, busy, cents, forms, leave, NEW_FORM, option, pendi
 import { refreshBudgets, subjectKey } from './funding.js';
 import { assessInvoices, invoiceTotal, renderInvoices } from './invoices.js';
 
-/* ---------- 境内差旅单 (/easy-v2): travellers and legs, saved over HTTP, never submitted ---------- */
+/* ---------- 境内差旅单: travellers and legs, saved over HTTP, never submitted ---------- */
 const TRAVEL = '境内差旅单';
 const TRAVELLER_KINDS = { staff: '教工', student: '学生' };
 /** 每日补贴标准, yuan: what OA returned for 教工/学生 travellers on D209900000037 (2026-10-21). OA states a

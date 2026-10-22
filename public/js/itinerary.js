@@ -3,7 +3,7 @@ import { $, api, droppedFiles, dropZone, leave, MAX_INVOICE_BYTES, pending, read
 import { addInvoices } from './invoices.js';
 import { lookupTraveller, paintBorrows, renderCtripPicked, renderLines, renderTravellers, VEHICLES } from './travel.js';
 
-/* ---------- 行程附件 (/easy-v2, 境内差旅单): parsed in memory on this machine, then reviewed and filled in ---------- */
+/* ---------- 行程附件 (境内差旅单): parsed in memory on this machine, then reviewed and filled in ---------- */
 const ITINERARY_TYPES = { train: '火车票', flight: '机票', flight_other: '携程退改', hotel: '酒店水单', hotel_invoice: '住宿发票',
   meeting_invoice: '会务发票', document: '通知/日程', unknown: '未识别' };
 const ITINERARY_EXT = /\.(pdf|docx|png|jpe?g)$/i;
