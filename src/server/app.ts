@@ -16,10 +16,8 @@ import { CONTRACTS } from '../automation/contracts';
 import { OaApi, handleOaRoute } from './oa-api';
 
 /** The page's address. The development repository serves /Reim-Copilot; the published copy (scripts/export-deploy.mjs)
- * serves /Reim-Copilot. Every other entry point redirects here. */
+ * serves /Reim-Copilot. / redirects here. */
 export const PAGE_PATH = '/Reim-Copilot';
-/** Addresses the page had before; bookmarks of them land on PAGE_PATH. */
-const OLD_PAGE_PATHS = new Set(['/', '/easy', '/easy-v2']);
 
 const MAX_BODY = 12 * 1024 * 1024;
 const STATIC_FILES: Record<string, [string, string]> = {
@@ -260,8 +258,8 @@ export function createApp(options: AppOptions) {
         }
         throw new AppError(404, '接口或任务不存在。');
       }
-      // The one-page reimbursement is the only UI; its old addresses (/easy, /easy-v2) and / land on it.
-      if (req.method === 'GET' && OLD_PAGE_PATHS.has(url.pathname)) {
+      // The one-page reimbursement is the only UI.
+      if (req.method === 'GET' && url.pathname === '/') {
         res.writeHead(302, { Location: PAGE_PATH });
         return res.end();
       }

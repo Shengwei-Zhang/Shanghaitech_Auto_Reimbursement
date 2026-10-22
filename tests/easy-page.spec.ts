@@ -63,11 +63,9 @@ async function choose(page: Page, select: string, value: string) {
   await page.locator(select).selectOption(value, { force: true });
 }
 
-test('old addresses land on the page, which loads as ES modules', async ({ page }) => {
-  for (const old of ['/', '/easy', '/easy-v2']) {
-    await page.goto(old);
-    await expect(page).toHaveURL(new RegExp(`${PAGE_PATH}$`));
-  }
+test('/ lands on the page, which loads as ES modules', async ({ page }) => {
+  await page.goto('/');
+  await expect(page).toHaveURL(new RegExp(`${PAGE_PATH}$`));
   await expect(page.locator('script[type="module"][src="/js/main.js"]')).toHaveCount(1);
 });
 
