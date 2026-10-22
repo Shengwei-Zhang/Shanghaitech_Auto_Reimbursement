@@ -1,0 +1,48 @@
+{
+  "name": "reimbursement-copilot",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Reimbursement Copilot (报销助手): fills, saves and submits ShanghaiTech OA reimbursements over HTTP from a local page.",
+  "main": "dist/server/main.js",
+  "scripts": {
+    "start": "npm run build && node dist/server/main.js",
+    "dev": "npm run start",
+    "start:compiled": "node dist/server/main.js",
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test tests/*.test.cjs && playwright test tests/legacy-core.spec.ts tests/easy-page.spec.ts",
+    "automation:cli": "npm run build && node dist/cli.js",
+    "batch:check": "npm run build && node dist/batch.js check",
+    "batch:draft": "npm run build && node dist/batch.js draft",
+    "browser:install": "playwright install chromium",
+    "test:oa": "npm run build && playwright test tests/oa-flow.spec.ts tests/recorded-flow.spec.ts tests/budget-picker.spec.ts",
+    "test:all": "npm run build && node --test tests/*.test.cjs && playwright test",
+    "oa:connect": "npm run build && node dist/connect.js",
+    "oa:login": "npm run build && node dist/login.js",
+    "oa:http": "npm run build && node dist/http.js",
+    "oa:tasks": "npm run build && node dist/tasks.js",
+    "oa:open": "npm run build && node dist/open.js",
+    "oa:funds": "npm run build && node dist/funds.js",
+    "oa:budgets": "npm run build && node dist/budgets.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "jpeg-js": "0.4.4",
+    "onnxruntime-node": "1.30.0",
+    "paddleocr": "1.2.0",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "playwright": "^1.55.0",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.36",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

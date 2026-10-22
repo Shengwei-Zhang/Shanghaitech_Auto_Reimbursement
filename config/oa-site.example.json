@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "saveResponse": {
+    "pathname": "/TODO-confirm-save-path",
+    "field": "TODO-confirm-business-success-field",
+    "equals": true
+  },
+  "receipt": {
+    "container": "TODO-receipt-container",
+    "documentNumber": "TODO-document-number-field",
+    "amount": "TODO-amount-field",
+    "status": "TODO-status-field",
+    "savedStatuses": ["TODO-saved-status"],
+    "submittedStatuses": ["TODO-submitted-status"]
+  }
+}

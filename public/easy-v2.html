@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN" data-layout="v2">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>报销助手 · Reimbursement Copilot</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/easy.css"><link rel="stylesheet" href="/easy-v2.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <section id="login-screen" class="login-screen">
+    <form id="login-form" class="login-card">
+      <div class="brand"><span class="mark">报</span><div><strong>报销助手</strong><small>Reimbursement Copilot · 上海科技大学</small></div></div>
+      <h1>登录学校 OA</h1>
+      <p class="hint">使用统一身份认证的学号/工号和密码。登录由本机后台直接向学校服务器发起，密码只用于这一次登录，不会保存。</p>
+      <label>学号/工号<input id="username" autocomplete="username" required maxlength="32"></label>
+      <label>密码<input id="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+      <div id="captcha-row" class="captcha-row" hidden>
+        <label>验证码<input id="captcha" autocomplete="off" maxlength="10" inputmode="latin" spellcheck="false"></label>
+        <img id="captcha-image" alt="学校登录验证码"><button id="captcha-refresh" class="link" type="button">换一张</button>
+      </div>
+      <div id="login-error" class="message error" role="alert" hidden></div>
+      <button id="login-button" class="primary wide" type="submit">登录</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="top">
+      <div class="brand"><span class="mark">报</span><div><strong>报销助手</strong><small>Reimbursement Copilot · 上海科技大学</small></div></div>
+      <div id="crumb" class="crumb mono" aria-label="当前位置">报销 / 用款申请单 / 新建</div>
+      <div class="account">
+        <a id="print-open" class="nav-pill" href="/print-list" target="_blank" rel="noopener" title="在新标签页打开报销单打印">
+          <span class="pill-icon" aria-hidden="true">⎙</span>报销单打印</a>
+        <div class="user-chip">
+          <span id="account-avatar" class="avatar" aria-hidden="true"></span>
+          <span class="who"><strong id="account-name"></strong><span class="mono"><span id="account-id"></span><span id="clock"></span></span></span>
+          <button id="logout" class="chip-btn" type="button" title="退出学校 OA 登录">退出</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <details id="login-proof" class="proof"><summary id="login-proof-title"></summary><ul id="login-steps"></ul></details>
+      <div id="message" class="message" role="status" hidden></div>
+
+      <form id="claim" class="card" novalidate>
+        <section class="overview panel" aria-label="本单概览">
+          <div class="overview-head">
+            <p id="claim-eyebrow" class="eyebrow">用款申请单 · 新建</p>
+            <h2 id="claim-title">填写用款申请单</h2>
+            <p id="claim-subtitle" class="mono small"></p>
+          </div>
+          <dl id="claim-stats" class="stats"></dl>
+        </section>
+        <nav id="section-nav" class="section-nav" aria-label="页面分区"></nav>
+
+        <fieldset id="section-basics">
+          <legend>单据与经费</legend>
+          <div class="hrow hrow-form">
+            <label class="field">报销类型
+              <select id="claim-type" required>
+                <option value="用款申请单" selected>用款申请单</option>
+                <option disabled>用车报销单（暂未开放）</option>
+                <option disabled>采购预付及报销单（暂未开放）</option>
+                <option disabled>预付账款单（暂未开放）</option>
+                <option value="境内差旅单">境内差旅单</option>
+                <option disabled>因公出国（境）单（暂未开放）</option>
+              </select>
+            </label>
+            <div class="field" data-claim="用款申请单">用款申请单
+              <div class="with-button">
+                <select id="form-select" required aria-label="用款申请单"></select>
+                <button id="form-refresh" class="icon" type="button" title="重新查询空白用款申请单" aria-label="刷新">↻</button>
+              </div>
+            </div>
+            <div class="field" data-claim="境内差旅单" hidden>境内差旅单
+              <div class="with-button">
+                <select id="travel-form-select" aria-label="境内差旅单"></select>
+                <button id="travel-form-refresh" class="icon" type="button" title="重新查询空白差旅单" aria-label="刷新">↻</button>
+              </div>
+            </div>
+            <label class="field">项目类别
+              <select id="fund-kind">
+                <option value="authorized">被授权的项目</option>
+                <option value="responsible">我负责的项目</option>
+              </select>
+            </label>
+            <label class="field">经费
+              <select id="fund-select" required disabled><option value="" data-pending="正在加载" data-pending-shown="正在加载">正在加载</option></select>
+            </label>
+            <label class="field" data-claim="用款申请单">预算项
+              <select id="subject-select" required disabled><option value="">请先选择经费</option></select>
+            </label>
+          </div>
+          <div class="hints">
+            <p id="form-filter" class="hint small" data-claim="用款申请单"></p>
+            <p id="balance" class="hint small"></p>
+          </div>
+          <div id="travel-lines" class="money-block" data-claim="境内差旅单" hidden>
+            <p class="money-title">经费明细（所选经费下的支出项目，合计等于差旅合计）</p>
+            <div class="table-scroll">
+              <table class="invoices money-lines lines">
+                <thead><tr><th>支出项目（预算项）</th><th class="num">金额（元）</th><th>用途</th><th></th></tr></thead>
+                <tbody id="line-rows"></tbody>
+              </table>
+            </div>
+            <div class="travel-actions"><button type="button" id="line-add" class="add">＋ 增加支出项目</button></div>
+            <p id="line-total" class="hint small"></p>
+          </div>
+        </fieldset>
+
+        <fieldset id="section-invoices">
+          <legend>发票</legend>
+          <div id="drop" class="drop">
+            <div class="drop-idle">
+              <div class="drop-text">
+                <p>把全电发票 PDF 或整个文件夹拖到这里</p>
+                <p class="hint small">1–10 张，关联到同一张报销单；须可提取文字；一个 PDF 含多张发票时自动按页拆分。同一销售方同一开票日期的发票，在一张报销单内合计不超过 499.99 元。</p>
+              </div>
+              <div class="drop-actions">
+                <button type="button" id="pick-files" class="accent">选择文件</button>
+                <button type="button" id="pick-folder">选择文件夹</button>
+                <button type="button" id="pick-folder-oa">从 OA 票夹选择已上传的发票</button>
+              </div>
+            </div>
+            <p class="drop-active">松开以上传发票 PDF</p>
+            <input id="invoice" type="file" accept="application/pdf,.pdf" multiple hidden>
+            <input id="invoice-folder" type="file" webkitdirectory multiple hidden>
+          </div>
+          <div id="folder-panel" class="folder-panel" hidden>
+            <div class="folder-tools">
+              <strong>OA 票夹中未报销的发票</strong>
+              <input id="folder-search" type="search" placeholder="按发票号、销售方、日期或金额筛选">
+              <label class="check"><input id="folder-all" type="checkbox">显示全部（含金额与可报金额不一致的）</label>
+              <button type="button" id="folder-refresh" class="link">刷新</button>
+            </div>
+            <p id="folder-status" class="hint small"></p>
+            <div class="folder-scroll">
+              <table class="invoices">
+                <thead><tr><th></th><th>发票号</th><th>销售方</th><th>开票日期</th><th class="num">发票金额</th><th class="num">可报金额</th><th>票夹 / 说明</th></tr></thead>
+                <tbody id="folder-rows"></tbody>
+              </table>
+              <p id="folder-empty" class="hint small" hidden>没有符合条件的发票。</p>
+            </div>
+            <div class="folder-actions">
+              <button type="button" id="folder-close">关闭</button>
+              <button type="button" id="folder-add" class="primary" disabled>加入所选</button>
+            </div>
+          </div>
+          <div class="table-scroll">
+          <table id="invoice-table" class="invoices" hidden>
+            <thead><tr><th>#</th><th>来源</th><th>发票号</th><th>销售方 / 开票日期</th><th class="num">票面金额</th><th>OA 状态</th><th></th></tr></thead>
+            <tbody id="invoice-rows"></tbody>
+            <tfoot><tr><td></td><td colspan="3" id="invoice-count"></td><td class="num" id="invoice-total"></td><td colspan="2"></td></tr></tfoot>
+          </table>
+          </div>
+          <p id="invoice-info" class="hint small"></p>
+        </fieldset>
+
+        <fieldset id="itinerary" data-claim="境内差旅单" hidden>
+          <legend>行程附件</legend>
+          <div id="itinerary-drop" class="drop">
+            <div class="drop-idle">
+              <div class="drop-text">
+                <p>把火车票、机票（携程订单页）、酒店水单、会议通知拖到这里</p>
+                <p class="hint small">只在本机解析成行程，不保存、不上传 OA；“发票”中已加入的 PDF 也会一并解析。支持 PDF、Word、PNG/JPEG，图片和扫描件用本机 OCR 识别。</p>
+              </div>
+              <div class="drop-actions">
+                <button type="button" id="itinerary-pick-files" class="accent">选择文件</button>
+                <button type="button" id="itinerary-pick-folder">选择文件夹</button>
+              </div>
+            </div>
+            <p class="drop-active">松开以解析行程附件</p>
+            <input id="itinerary-files" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden>
+            <input id="itinerary-folder" type="file" webkitdirectory multiple hidden>
+          </div>
+          <div id="itinerary-result" class="itinerary-result" hidden>
+            <div class="table-scroll">
+              <table class="invoices itinerary-files">
+                <thead><tr><th>附件</th><th>识别为</th><th>内容</th><th></th></tr></thead>
+                <tbody id="itinerary-file-rows"></tbody>
+              </table>
+            </div>
+            <div id="itinerary-preview"></div>
+            <ul id="itinerary-warnings" class="itinerary-warnings"></ul>
+            <div class="travel-actions">
+              <button type="button" id="itinerary-apply" class="primary" disabled>填入出差人与行程</button>
+              <button type="button" id="itinerary-ctrip" class="add" hidden></button>
+              <button type="button" id="itinerary-invoices" class="add" hidden></button>
+              <button type="button" id="itinerary-clear" class="danger">清空附件</button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset id="travel" data-claim="境内差旅单" hidden>
+          <legend>出差人与行程</legend>
+          <div class="hrow hrow-travel">
+            <label class="field">携程借款单冲账（可选，可选多张；按未清余额全额冲账）
+              <select id="ctrip-select" disabled><option value="">请先选择经费</option></select>
+            </label>
+            <label class="field">情况说明（可选）<input id="travel-explain" maxlength="200"></label>
+          </div>
+          <div id="ctrip-picked" class="chips" hidden></div>
+          <p id="travel-total" class="hint small"></p>
+          <div id="travellers" class="travellers"></div>
+          <div class="travel-actions"><button type="button" id="traveller-add" class="add">＋ 添加出差人</button></div>
+        </fieldset>
+
+        <fieldset id="section-money">
+          <legend id="money-legend">金额与用途</legend>
+          <div class="hrow hrow-money">
+            <label class="field" data-claim="用款申请单">实报金额（元）<input id="amount" inputmode="decimal" required placeholder="自动等于发票合计"></label>
+            <label class="field">附件张数<input id="attachments" type="number" min="1" max="100" value="1" required></label>
+            <label class="field" data-claim="用款申请单">收款人（学号 / 工号 / 银行转账户名）<input id="payee" required maxlength="100" placeholder="学号或工号：个人银行卡；单位户名：银行汇款" autocomplete="off"></label>
+            <label class="field" data-claim="用款申请单">报销用途（经费明细的“用途”列）<input id="purpose" required maxlength="200" placeholder="例如：大模型API使用费"></label>
+            <label class="field">报销说明（可选，默认同用途）<input id="reason" maxlength="1000"></label>
+          </div>
+          <div data-claim="用款申请单">
+            <div id="bank-row" class="hrow hrow-bank" hidden>
+              <label class="field">银行转账收款账户（OA 供应商）<select id="bank-supplier"></select></label>
+              <label class="field">汇款用途<input id="remit-purpose" maxlength="100" placeholder="例如：设备款、会议注册费"></label>
+              <p id="bank-amount" class="hint small"></p>
+            </div>
+            <p id="payee-hint" class="hint small"></p>
+          </div>
+          <div id="travel-payees" class="money-block" data-claim="境内差旅单" hidden>
+            <p class="money-title">收款人（合计等于差旅合计减去携程冲账）</p>
+            <div class="table-scroll">
+              <table class="invoices money-lines payees">
+                <thead><tr><th>收款人（学号 / 工号 / 银行转账户名）</th><th>银行转账账户与汇款用途</th><th class="num">金额（元）</th><th></th></tr></thead>
+                <tbody id="payee-rows"></tbody>
+              </table>
+            </div>
+            <div class="travel-actions"><button type="button" id="payee-add" class="add">＋ 增加收款人</button></div>
+            <p id="payee-total" class="hint small"></p>
+          </div>
+          <p id="amount-hint" class="hint small" hidden></p>
+        </fieldset>
+
+        <div id="live-off" class="message error" hidden>真实 OA 执行未启用：请在 .env 中设置 OA_LIVE_ENABLED=true 并重启服务后再提交。</div>
+        <div id="claim-error" class="message error" role="alert" hidden></div>
+
+        <div class="hrow-actions">
+          <div class="ready">
+            <p class="eyebrow">提交前检查</p>
+            <p id="ready-count" class="ready-count mono">0 / 0</p>
+            <p id="ready-note" class="mono small"></p>
+          </div>
+          <ul id="ready-checks" class="ready-checks" aria-label="提交前检查"></ul>
+          <div class="ready-actions">
+          <div class="choices" role="radiogroup" aria-label="完成方式">
+            <span class="choices-label eyebrow">完成方式</span>
+            <label class="choice" title="填好并保存，我在 OA 中检查后自己提交"><input type="radio" name="action" value="save"> 只保存</label>
+            <label class="choice" title="核对无误后自动提交流转，审批路线用 OA 自动生成的"><input type="radio" name="action" value="submit"> 保存并提交流转</label>
+          </div>
+          <div class="buttons">
+            <button id="claim-reuse" type="button" hidden title="沿用上一单的经费、预算项、收款人工号、用途和报销事由">复用模板</button>
+            <button id="claim-new" type="button" title="清空表单并重新读取经费和空单">清空重填</button>
+            <button id="submit" class="primary cta" type="submit">提交</button>
+          </div>
+          </div>
+        </div>
+      </form>
+
+      <section id="jobs-card" class="card" hidden>
+        <p class="eyebrow">执行队列</p>
+        <h2>本页提交的任务 <span id="jobs-count" class="badge"></span></h2>
+        <p class="hint small">任务按提交顺序逐个执行，程序直接调用学校 OA 接口，不打开浏览器。前一个任务执行期间，查询经费、预算项、空单和 OA 票夹要等它完成；新建单据并上传 PDF 的报销可以直接提交排队。执行期间请不要在 OA 中修改这些单据。</p>
+        <div class="job-row jobs-head" aria-hidden="true">
+          <span class="num">#</span><span>提交时间</span><span>单据</span><span>发票</span><span class="num">实报金额</span><span>收款人</span><span>状态</span><span>当前步骤</span><span></span>
+        </div>
+        <ul id="jobs" class="jobs"></ul>
+      </section>
+
+      <section id="travel-card" class="card" hidden>
+        <p class="eyebrow">执行进度</p>
+        <h2>境内差旅单 <span id="travel-doc" class="mono"></span> <span id="travel-status" class="badge"></span></h2>
+        <p class="hint small">程序直接调用学校 OA 接口填写并保存这张差旅单；选了“保存并提交流转”时，回读核对无误后再提交，并在“报销单查询”中核对状态。执行期间请不要在 OA 中修改这张单据。</p>
+        <ol id="travel-events" class="events"></ol>
+        <div class="row"><button id="travel-stop" class="danger" type="button">停止执行</button></div>
+      </section>
+    </main>
+  </div>
+  <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text" data-pending="正在处理" data-pending-shown="正在处理">正在处理</span></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
