@@ -183,6 +183,9 @@ test('HTTP origin/session/CSRF protection and end-to-end demo child process', as
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.equal(completed.status, 'completed');
+  // The worker reports completion before its process exits; its exit must not reach a deleted data folder.
+  for (let i = 0; i < 100 && app.service.active; i++) await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(app.service.active, undefined, 'the demo worker has exited');
   assert.equal(completed.events.filter(event => event.state === 'completed').length, 14);
   assert.equal(completed.result.documentNumber, '演示单据');
   assert.equal((await fetch(`${base}/data/jobs/${job.id}/job.json`)).status, 404);
