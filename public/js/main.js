@@ -90,9 +90,13 @@ function applyClaimType() {
   queueOverview();
 }
 
-/** A fresh claim: every form, the invoices and the 行程附件 start over. */
-function resetClaim() {
+/** A fresh claim of the same 报销类型: every form, the invoices and the 行程附件 start over. A new login
+ * starts from the default type (`keepType` false). */
+function resetClaim(keepType = true) {
+  const type = currentType();
   $('claim').reset();
+  // form.reset() returns every control to its default, the 报销类型 select included.
+  if (keepType) $('claim-type').value = type;
   $('claim-error').hidden = true;
   $('live-off').hidden = state.liveEnabled;
   $('submit').disabled = !state.liveEnabled;

@@ -43,7 +43,7 @@ async function signIn(event) {
     $('login-screen').hidden = true;
     $('app').hidden = false;
     show('');
-    page.reset();
+    page.reset(false);
     page.loadWorkbench();
   } catch (error) {
     // A wrong captcha or password ends that login on the school side; the next click starts over.

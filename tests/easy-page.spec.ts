@@ -232,3 +232,17 @@ test('an open dropdown that is still loading is not redrawn (no flicker)', async
   await page.locator('#fund-kind').focus();
   await expect.poll(() => loading.textContent(), { timeout: 2000 }).not.toBe(before);
 });
+
+test('清空重填 keeps the 报销类型: a 境内差旅单 starts over as a 境内差旅单', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  await page.locator('.traveller').first().locator('.traveller-head input').first().fill('教师乙');
+  await page.click('#claim-new');
+  await expect(page.locator('#claim-type')).toHaveValue('境内差旅单');
+  await expect(page.locator('#claim-title')).toHaveText('填写境内差旅单');
+  await expect(page.locator('#travel')).toBeVisible();
+  await expect(page.locator('.traveller').first().locator('.traveller-head input').first()).toHaveValue('');
+  await page.locator('#claim-type').selectOption('用款申请单');
+  await page.click('#claim-new');
+  await expect(page.locator('#claim-type')).toHaveValue('用款申请单');
+});
