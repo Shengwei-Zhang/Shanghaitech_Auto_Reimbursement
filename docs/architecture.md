@@ -60,7 +60,7 @@ flowchart LR
 
 网页不持有长期 API Key，服务端不接受浏览器调试地址或任意网站地址。worker 只继承必要环境白名单，任务配置通过 IPC 传递；旧脚本的环境变量和模块状态限制在单个执行进程内。工作进程不把原始标准输出转存为任务日志，任务主要记录结构化阶段、错误分类和经过限制的核验信息。
 
-当前服务的调度并发固定为 1。独立 CLI 不经过这条队列，因此尚无覆盖所有命令的同账号锁或会话租约。存储 API 带 `ownerId`，但当前固定为 `local`，只是未来认证和仓库替换的接缝，不是多用户隔离。
+**单用户与多用户**：默认 `REIM_DEPLOYMENT=local`，一人在本机使用，全局一个会话、用款申请单任务同时一个（与之前相同）。`REIM_DEPLOYMENT=server` 时经 nginx 多人使用：`src/server/sessions.ts` 为每个浏览器建一个会话（各自的 Cookie、CSRF 令牌和 `OaApi`，即各自的学校登录、请求队列和差旅单），任务归属该会话，`JobService` 同时运行至多 `REIM_MAX_ACTIVE_JOBS` 个、同一用户逐个执行；配置与 nginx 示例见 [多用户部署](deployment.md)。
 
 网页仅创建和展示 `mode=live` 的任务；后端 API、演示 worker 及测试仍保留 `mode=demo`。默认 `OA_LIVE_ENABLED=false` 表示网页真实执行未启用，不是网页自动进入演示模式。
 

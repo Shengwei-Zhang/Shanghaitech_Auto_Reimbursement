@@ -1,7 +1,6 @@
 import { AppError, MAX_INVOICES, object, type Invoice, type WorkerEvent, type WorkerRequest } from '../domain/job';
 import { searchFundingHttp } from '../automation/http-bpm';
-import type { LaunchWorker } from '../application/job-service';
-import { inspectInvoice } from '../application/job-service';
+import { inspectInvoice, LOCAL_OWNER, type LaunchWorker } from '../application/job-service';
 import { FUNDING_KINDS } from '../automation/funding-search';
 import { checkInvoiceClaimHttp, claimMessage, listFolderInvoicesHttp, type FolderInvoice, type InvoiceClaim } from '../automation/invoice-claim';
 import { combinePrintPages, fetchPrintPageHttp, listPrintableHttp, printPermissionHttp, PrintError } from '../automation/http-print';
@@ -22,8 +21,10 @@ export interface PrintFile { body: string | Buffer; type: string; filename?: str
  * printing. Each 报销类型 is a module of its own (apply-money-api.ts, travel-api.ts) registered in `types`;
  * a new one is added there, borrowing only the login (FormHost). */
 export class OaApi extends OaSession {
+  /** Whose jobs this browser's 用款申请单 become: 'local' on one's own computer, a random id per browser on a server. */
+  ownerId = LOCAL_OWNER;
   /** 用款申请单: blank forms, budgets, the fill and submission as jobs. */
-  readonly applyMoney = new ApplyMoneyApi(this);
+  readonly applyMoney = new ApplyMoneyApi(this, () => this.ownerId);
   /** 境内差旅单, kept apart from the 用款申请单 jobs; it borrows only this login. */
   readonly travel = new TravelApi(this);
   /** Every 报销类型's routes, in the order they are asked. */

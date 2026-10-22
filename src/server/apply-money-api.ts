@@ -7,7 +7,7 @@ import type { OaHttpClient } from '../automation/http-login';
 import { createReimbursementHttp, isBlankApplyMoneyHttp, listApplyMoneyTodosHttp, openFormHttp, openOwnerQueryHttp, searchBudgetHttp,
   type ApplyMoneyTodo, type HttpForm, type QueryDocument } from '../automation/http-bpm';
 import { writeSessionState, type StorageState } from '../automation/session-state';
-import { inspectInvoice, type JobService, type LaunchWorker } from '../application/job-service';
+import { inspectInvoice, LOCAL_OWNER, type JobService, type LaunchWorker } from '../application/job-service';
 import type { JobStore } from '../infrastructure/job-store';
 import { BudgetSearchError } from '../automation/budget-search';
 import { cents, fillFormHttp, formInvoiceCount, fundingTabs, HttpFillError, type FillStep } from '../automation/http-fill';
@@ -40,7 +40,12 @@ export class ApplyMoneyApi {
   private creating = false;
   private jobs?: ApplyMoneyJobs;
 
-  constructor(private readonly host: ApplyMoneyHost) {}
+  /** `owner`: whose jobs this browser's 用款申请单 become ('local' on one's own computer). */
+  constructor(private readonly host: ApplyMoneyHost, private readonly owner: () => string = () => LOCAL_OWNER) {}
+
+  private get ownerId(): string {
+    return this.owner();
+  }
 
   /** The login ended: nothing listed or opened under it is kept. */
   reset(): void {
@@ -185,15 +190,15 @@ export class ApplyMoneyApi {
     const { target, storageState } = await this.handoff(data.documentNumber ?? null);
     const { formMode: _mode, target: _target, ...input } = object(data.input);
     const job = await service.create({ mode: 'live', action: data.action, invoices: uploads,
-      input: { ...input, ...(target ? { formMode: 'target', target } : { formMode: 'new' }) } }, { folder })
+      input: { ...input, ...(target ? { formMode: 'target', target } : { formMode: 'new' }) } }, { folder }, this.ownerId)
       .catch(error => { if (target) this.release(target.documentNumber); throw error; });
     const file = path.join(store.directory(job.id), 'oa-session.json');
     try {
       await writeSessionState(storageState, file);
-      return service.start(job.id, { confirmed: true, loginMode: 'manual' }, file);
+      return service.start(job.id, { confirmed: true, loginMode: 'manual' }, file, this.ownerId);
     } catch (error) {
       fs.rmSync(file, { force: true });
-      service.cancel(job.id);
+      service.cancel(job.id, this.ownerId);
       if (target) this.release(target.documentNumber);
       throw error instanceof AppError ? error : new AppError(500, '未能启动执行，任务已取消，没有操作 OA。');
     }

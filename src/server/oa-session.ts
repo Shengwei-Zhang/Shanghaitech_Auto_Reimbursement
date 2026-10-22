@@ -82,8 +82,12 @@ export class OaSession implements FormHost {
    * so every call to it waits for the previous one. */
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly signInWith: PasswordLogin = defaultLogin,
-    protected readonly saved: SavedCredentials | undefined = savedCredentials()) {}
+  /** `saved`: the .env account for "使用已保存账号"; null = none (a shared server never offers it). */
+  protected readonly saved: SavedCredentials | undefined;
+
+  constructor(private readonly signInWith: PasswordLogin = defaultLogin, saved: SavedCredentials | null | undefined = savedCredentials()) {
+    this.saved = saved ?? undefined;
+  }
 
   serial<T>(task: () => Promise<T>): Promise<T> {
     const run = this.queue.then(task, task);

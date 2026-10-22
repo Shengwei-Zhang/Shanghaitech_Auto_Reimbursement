@@ -15,11 +15,14 @@ export class JobStore {
   }
 
   list(ownerId: string): Job[] {
+    return this.all().filter(job => job.ownerId === ownerId);
+  }
+
+  private all(): Job[] {
     return fs.readdirSync(this.root, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && /^[0-9a-f-]{36}$/.test(entry.name)
         && fs.existsSync(path.join(this.root, entry.name, 'job.json')))
       .map(entry => this.read(entry.name))
-      .filter(job => job.ownerId === ownerId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -51,10 +54,11 @@ export class JobStore {
     return job;
   }
 
-  recover(ownerId: string): void {
-    for (const job of this.list(ownerId)) {
+  /** Jobs a stopped server left running are interrupted: one owner's, or everyone's when `ownerId` is left out. */
+  recover(ownerId?: string): void {
+    for (const job of ownerId === undefined ? this.all() : this.list(ownerId)) {
       if (['running', 'queued', 'waiting_manual', 'waiting_review'].includes(job.status)) {
-        this.update(job.id, ownerId, current => {
+        this.update(job.id, job.ownerId, current => {
           current.status = 'interrupted';
           current.events.push({ at: new Date().toISOString(), message: '服务重启，任务已中断。请核对 OA 现有单据；系统不会自动重放。' });
         });

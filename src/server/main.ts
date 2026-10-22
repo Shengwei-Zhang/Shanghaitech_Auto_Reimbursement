@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createApp, PAGE_PATH } from './app';
 import { loadSiteProfile } from '../infrastructure/site-profile';
+import { deploymentFromEnv } from './deployment';
 
 dotenv.config();
 const port = Number(process.env.PORT || 4317);
@@ -33,10 +34,15 @@ lock();
 process.once('exit', () => {
   if (fs.existsSync(lockFile) && fs.readFileSync(lockFile, 'utf8') === String(process.pid)) fs.unlinkSync(lockFile);
 });
+// local (default): this computer only. server: several users behind nginx on this machine (docs/deployment.md).
+const deployment = deploymentFromEnv();
 const app = createApp({ dataDir, liveEnabled: process.env.OA_LIVE_ENABLED === 'true', deepSeekKey: process.env.DEEPSEEK_API_KEY,
-  siteProfile: loadSiteProfile(process.env.OA_SITE_PROFILE) });
+  siteProfile: loadSiteProfile(process.env.OA_SITE_PROFILE), deployment });
 app.server.once('error', error => { console.error(error.message); process.exitCode = 1; });
-app.server.listen(port, '127.0.0.1', () => console.log(`报销助手：http://127.0.0.1:${port}${PAGE_PATH}`));
+// Always 127.0.0.1: on a server only the proxy on this machine reaches it.
+app.server.listen(port, '127.0.0.1', () => console.log(deployment.mode === 'server'
+  ? `报销助手（多用户）：${deployment.origins[0]}${PAGE_PATH}，经反向代理转发到 127.0.0.1:${port}`
+  : `报销助手：http://127.0.0.1:${port}${PAGE_PATH}`));
 const shutdown = () => {
   app.service.shutdown();
   app.server.close();

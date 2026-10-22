@@ -1,7 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { AppError, object } from '../domain/job';
 import { buildItinerary, sanitizeItems } from '../domain/itinerary';
 import { parseItineraryFile } from '../infrastructure/itinerary-files';
@@ -15,6 +15,8 @@ import { CONTRACTS } from '../automation/contracts';
 import { OaApi, handleOaRoute } from './oa-api';
 import { Created, type FormContext } from './form-routes';
 import { pagePath } from './page-path';
+import type { Deployment } from './deployment';
+import { equalSecret, SessionRegistry } from './sessions';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
  * / redirects here. */
@@ -45,10 +47,6 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   catch { throw new AppError(400, 'JSON 请求格式无效。'); }
 }
 
-function equalSecret(a: string, b: string): boolean {
-  const left = Buffer.from(a), right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
 
 export interface AppOptions {
   dataDir: string;
@@ -59,21 +57,41 @@ export interface AppOptions {
   launcher?: LaunchWorker;
   timeoutMs?: number;
   siteProfile?: SiteProfile;
+  /** 'local' (one user, 127.0.0.1, the default) keeps this one OaApi; 'server' makes one per browser. */
   oaApi?: OaApi;
+  /** How the server is reached (see deployment.ts); local by default. */
+  deployment?: Deployment;
+  /** server: each browser's OaApi; tests swap it. */
+  makeOaApi?: () => OaApi;
 }
 
 export function createApp(options: AppOptions) {
+  const deployment: Deployment = options.deployment ?? { mode: 'local', origins: [], trustProxy: false, idleMinutes: 120, maxSessions: 1, maxActiveJobs: 1 };
+  const shared = deployment.mode === 'local';
   const store = new JobStore(path.join(options.dataDir, 'jobs'));
-  store.recover(LOCAL_OWNER);
-  const oaApi = options.oaApi || new OaApi();
+  store.recover(shared ? LOCAL_OWNER : undefined);
+  /** Each browser's OaApi: on a server its own login and an owner id of its own, so jobs are never seen across browsers.
+   * Saved credentials (.env OA_USERNAME/OA_PASSWORD) are for one's own computer only. */
+  const makeApi = (): OaApi => {
+    if (shared) return options.oaApi || new OaApi();
+    const api = options.makeOaApi ? options.makeOaApi() : new OaApi(undefined, null);
+    api.ownerId = `u-${randomBytes(16).toString('hex')}`;
+    api.useJobs({ service, store });
+    return api;
+  };
+  const sessions = new SessionRegistry(() => makeApi(), { shared, idleMs: deployment.idleMinutes * 60_000, max: deployment.maxSessions });
+  /** The OaApi a job belongs to: the browser session with the job's owner id. A session that has ended has no login to run on. */
+  const apiFor = (ownerId: string): OaApi => {
+    const api = sessions.apis().find(item => item.ownerId === ownerId);
+    if (!api) throw new AppError(401, '该任务所属的登录已结束。');
+    return api;
+  };
   // Filling runs over HTTP; submission has not been mapped to requests yet, so a browser submits the saved form.
   const launcher: LaunchWorker = options.launcher || ((request, onEvent, onExit) =>
     request.job.mode === 'live' && request.sessionStateFile && process.env.OA_HTTP_FILL !== 'false'
-      ? oaApi.fillJob(request, onEvent, onExit, launchWorker) : launchWorker(request, onEvent, onExit));
+      ? apiFor(request.job.ownerId).fillJob(request, onEvent, onExit, launchWorker) : launchWorker(request, onEvent, onExit));
   const service = new JobService(store, options.advisor || new DeepSeekAdvisor(options.deepSeekKey || ''),
-    options.liveEnabled === true, launcher, options.timeoutMs, options.siteProfile);
-  const sessionSecret = randomBytes(32).toString('hex');
-  const csrfSecret = randomBytes(32).toString('hex');
+    options.liveEnabled === true, launcher, options.timeoutMs, options.siteProfile, deployment.maxActiveJobs);
   const publicDir = options.publicDir || path.resolve(__dirname, '../../public');
   // The page's modules, one per shared part and per 报销类型 (see public/js/main.js): every public/js/*.js, so a new
   // 报销类型's module is served without listing it here. Only plain names; nothing below public/js.
@@ -81,9 +99,9 @@ export function createApp(options: AppOptions) {
     ? fs.readdirSync(path.join(publicDir, 'js')) : []).filter(name => /^[a-z][a-z0-9-]*\.js$/.test(name))
     .map(name => [`/js/${name}`, [`js/${name}`, 'text/javascript; charset=utf-8'] as [string, string]]));
 
-  oaApi.useJobs({ service, store });
-  /** What each 报销类型's routes may use besides the login. */
-  const context: FormContext = { liveEnabled: service.liveEnabled, readInvoices: value => oaApi.pageInvoices(value) };
+  if (shared) sessions.apis()[0].useJobs({ service, store });
+  /** What each 报销类型's routes may use besides the login, for one browser's OaApi. */
+  const contextOf = (api: OaApi): FormContext => ({ liveEnabled: service.liveEnabled, readInvoices: value => api.pageInvoices(value) });
 
   const server = http.createServer(async (req, res) => {
     const json = (status: number, data: unknown) => {
@@ -92,26 +110,29 @@ export function createApp(options: AppOptions) {
     };
     applyHeaders(res);
     try {
-      // This edition deliberately has no public bind address. A proxy is not an authentication layer.
+      // Local: only this computer, at 127.0.0.1. Server: only the configured public origin(s), through the proxy.
       const address = server.address();
       const port = address && typeof address !== 'string' ? address.port : 0;
-      const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
-      if (!hosts.includes(req.headers.host || '')) throw new AppError(403, '仅允许本机访问。');
-      if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) throw new AppError(403, '请求来源不被允许。');
+      const origins = shared ? [`http://127.0.0.1:${port}`, `http://localhost:${port}`] : deployment.origins;
+      const forwarded = deployment.trustProxy ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() : '';
+      const scheme = shared ? 'http' : forwarded || 'http';
+      const here = `${scheme}://${req.headers.host || ''}`;
+      if (!origins.includes(here)) throw new AppError(403, shared ? '仅允许本机访问。' : '访问地址不被允许。');
+      if (req.headers.origin && req.headers.origin !== here) throw new AppError(403, '请求来源不被允许。');
       if (req.headers['sec-fetch-site'] === 'cross-site') throw new AppError(403, '不接受跨站请求。');
-      const url = new URL(req.url || '/', `http://${req.headers.host}`);
+      const url = new URL(req.url || '/', here);
+      const cookie = (req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith('oa_session='))?.slice(11) || '';
       if (req.method === 'GET' && url.pathname === '/api/session') {
-        res.setHeader('Set-Cookie', `oa_session=${sessionSecret}; HttpOnly; SameSite=Strict; Path=/`);
-        return json(200, { csrfToken: csrfSecret, liveEnabled: service.liveEnabled,
+        const session = sessions.open(cookie);
+        res.setHeader('Set-Cookie', `oa_session=${session.id}; HttpOnly; SameSite=Strict; Path=/${shared ? '' : '; Secure'}`);
+        return json(200, { csrfToken: session.csrf, liveEnabled: service.liveEnabled, deployment: deployment.mode,
           aiConfigured: Boolean(options.deepSeekKey || options.advisor), edition: 'local', maxPdfMB: 8,
           planConfigured: Boolean(options.advisor ? options.advisor.generatePlan : options.deepSeekKey?.trim()),
           receiptConfigured: Boolean(options.siteProfile), stages: CONTRACTS });
       }
-      const cookie = (req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith('oa_session='))?.slice(11) || '';
       const printToken = req.method === 'GET' ? url.pathname.match(/^\/print\/([\w-]{24})$/)?.[1] : undefined;
       if (printToken) {
-        if (!equalSecret(cookie, sessionSecret)) throw new AppError(401, '本地会话已失效，请刷新页面。');
-        const file = oaApi.takePrint(printToken);
+        const file = sessions.require(cookie).api.takePrint(printToken);
         if (!file) throw new AppError(404, '打印内容已过期或已打开过，请回到报销单打印页面重新点击。');
         // OA's page: inline data images, inline styles (watermark layer), and only our print.js.
         res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
@@ -120,13 +141,14 @@ export function createApp(options: AppOptions) {
         return res.end(file.body);
       }
       if (url.pathname.startsWith('/api/')) {
-        if (!equalSecret(cookie, sessionSecret)) throw new AppError(401, '本地会话已失效，请刷新页面。');
-        if (req.method !== 'GET' && !equalSecret(String(req.headers['x-csrf-token'] || ''), csrfSecret)) {
+        const session = sessions.require(cookie);
+        if (req.method !== 'GET' && !equalSecret(String(req.headers['x-csrf-token'] || ''), session.csrf)) {
           throw new AppError(403, '请求校验失败，请刷新页面后重试。');
         }
-        // The login, shared queries and every 报销类型's own routes (oa-api.ts).
+        const { api: oaApi } = session, owner = oaApi.ownerId;
+        // The login, shared queries and every 报销类型's own routes (oa-api.ts), all of this browser's.
         if (url.pathname.startsWith('/api/oa/')) {
-          const result = await handleOaRoute(oaApi, req.method || 'GET', url, () => readJson(req), context);
+          const result = await handleOaRoute(oaApi, req.method || 'GET', url, () => readJson(req), contextOf(oaApi));
           if (result === undefined) throw new AppError(404, '接口不存在。');
           return result instanceof Created ? json(201, result.body) : json(200, result);
         }
@@ -152,14 +174,18 @@ export function createApp(options: AppOptions) {
           return json(200, { itinerary: buildItinerary(items) });
         }
         if (req.method === 'POST' && url.pathname === '/api/invoices/split') return json(200, await splitInvoicePdf(await readJson(req)));
-        if (req.method === 'GET' && url.pathname === '/api/jobs') return json(200, { jobs: store.list(LOCAL_OWNER) });
-        if (req.method === 'POST' && url.pathname === '/api/jobs') return json(201, { job: await service.create(await readJson(req)) });
+        if (req.method === 'GET' && url.pathname === '/api/jobs') return json(200, { jobs: store.list(owner) });
+        // Jobs outside the page (demo, a browser worker with typed credentials) are for one's own computer only.
+        if (req.method === 'POST' && url.pathname === '/api/jobs') {
+          if (!shared) throw new AppError(404, '接口或任务不存在。');
+          return json(201, { job: await service.create(await readJson(req)) });
+        }
         const match = url.pathname.match(/^\/api\/jobs\/([0-9a-f-]{36})(?:\/(start|cancel|review|reconcile|complete-manual|plan))?$/);
         if (match) {
           const [, id, action] = match;
-          if (req.method === 'GET' && !action) return json(200, { job: store.get(id, LOCAL_OWNER) });
+          if (req.method === 'GET' && !action) return json(200, { job: store.get(id, owner) });
           if (req.method === 'GET' && action === 'plan') {
-            const plan = service.getPlan(id);
+            const plan = service.getPlan(id, owner);
             if (url.searchParams.get('download') === '1') {
               res.setHeader('Content-Disposition', `attachment; filename="reimbursement.v${plan.version}.json"`);
               res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -169,12 +195,15 @@ export function createApp(options: AppOptions) {
           }
           if (req.method === 'POST' && action) {
             const body = await readJson(req);
-            if (action === 'start') return json(200, { job: service.start(id, body) });
-            if (action === 'cancel') return json(200, { job: service.cancel(id) });
-            if (action === 'review') return json(200, { job: await service.review(id, body) });
-            if (action === 'plan') return json(200, { job: await service.generatePlan(id, body) });
-            if (action === 'reconcile') return json(200, { job: service.reconcile(id, body) });
-            if (action === 'complete-manual') return json(200, { job: service.completeManual(id, body) });
+            if (action === 'start') {
+              if (!shared) throw new AppError(404, '接口或任务不存在。');
+              return json(200, { job: service.start(id, body) });
+            }
+            if (action === 'cancel') return json(200, { job: service.cancel(id, owner) });
+            if (action === 'review') return json(200, { job: await service.review(id, body, owner) });
+            if (action === 'plan') return json(200, { job: await service.generatePlan(id, body, owner) });
+            if (action === 'reconcile') return json(200, { job: service.reconcile(id, body, owner) });
+            if (action === 'complete-manual') return json(200, { job: service.completeManual(id, body, owner) });
           }
         }
         throw new AppError(404, '接口或任务不存在。');
@@ -200,7 +229,7 @@ export function createApp(options: AppOptions) {
   });
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
-  server.on('close', () => service.shutdown());
+  server.on('close', () => { service.shutdown(); sessions.close(); });
   return { server, service, store };
 }
 
