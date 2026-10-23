@@ -35,7 +35,7 @@ async function openPage(page: Page): Promise<Stub> {
       case 'GET /api/oa/folder-invoices': return json(route, { invoices: [{ folderId: '1879423340632997890', folderName: '自行上传票据',
         number: '26117000000000000041', seller: '某商贸公司', date: '2026-09-08', amount: '300.00', balance: '300.00', selectable: true, reason: '' }], truncated: false });
       case 'GET /api/oa/travel': return json(route, { run: null });
-      case 'GET /api/oa/travel/forms': return json(route, { forms: [{ documentNumber: 'D209900000038', date: '2026-10-21' }] });
+      case 'GET /api/oa/travel/forms': return json(route, { forms: [{ documentNumber: 'D209900000039', date: '2026-10-21' }] });
       case 'GET /api/oa/travel/borrows': return json(route, { borrows: [
         { order: '1990000000000006', remark: '携程机票 上海至大连', personName: '教师乙', outstanding: '882.00', date: '2026-08-16' }] });
       case 'GET /api/oa/travel/people': return json(route, { people: url.searchParams.get('name') === '教师乙'
@@ -423,10 +423,72 @@ test('the login page explains the project, and every page has the footer', async
   await expect(page.locator('.site-footer')).toBeVisible();
   await expect(page.locator('.site-footer')).toContainText('实现高效的办公。');
   // The address comes from REIM_CONTACT_EMAIL (help@reimbursement-copilot.invalid for the test server).
-  await expect(page.locator('#footer-contact')).toHaveText('有任何问题请邮件联系 help@reimbursement-copilot.invalid。');
+  await expect(page.locator('#footer-contact')).toHaveText('有任何问题请邮件联系 help@reimbursement-copilot.invalid');
   await expect(page.locator('#footer-email')).toHaveAttribute('href', 'mailto:help@reimbursement-copilot.invalid');
   for (const path of ['/print-list', '/admin']) {
     await page.goto(path);
     await expect(page.locator('.site-footer')).toContainText('本项目旨在帮助各位同事便捷制作各种报销单');
   }
+});
+
+test('报销单打印: 生成打印文件 per row or for all picked; 请求中, then 报销文件已就绪 (not clickable) with 打印 and 下载', async ({ page }) => {
+  const rows = [
+    { bizId: 'a'.repeat(32), billCode: 'A209900000013', kind: '用款申请单', date: '2026-10-10', amount: '300.00', remark: '测试一', print: 'check' },
+    { bizId: 'b'.repeat(32), billCode: 'A209900000014', kind: '用款申请单', date: '2026-10-11', amount: '120.00', remark: '测试二', print: 'yes' },
+    { bizId: 'c'.repeat(32), billCode: 'D209900000036', kind: '境内差旅单', date: '2026-09-04', amount: '980.00', remark: '测试三', print: 'yes' },
+  ];
+  const made: string[] = [];
+  let release: (() => void) | undefined;
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+    if (key === 'GET /api/session') return route.fulfill({ json: { csrfToken: 't' } });
+    if (key === 'GET /api/oa/status') return route.fulfill({ json: { loggedIn: true, login: { userAccount: '900001', userName: '报销人甲' } } });
+    if (key === 'GET /api/oa/print') return route.fulfill({ json: { rows, total: 3 } });
+    if (key === 'GET /api/oa/print/permission') return route.fulfill({ json: { bizId: url.searchParams.get('bizId'), allowed: true } });
+    if (key === 'GET /api/oa/print/files') return route.fulfill({ json: { files: [] } });
+    if (key === 'POST /api/oa/print/file') {
+      const { bizId } = route.request().postDataJSON();
+      made.push(bizId);
+      // The first one waits, so 请求中 can be seen.
+      if (made.length === 1) await new Promise<void>(resolve => { release = resolve; });
+      const row = rows.find(item => item.bizId === bizId)!;
+      return route.fulfill({ json: { bizId, billCode: row.billCode, printUrl: `/print/ready/${bizId.slice(0, 24)}`,
+        pdfUrl: `/print/ready/${bizId.slice(0, 24)}.pdf`, filename: `${row.billCode}.pdf`, expiresAt: new Date(Date.now() + 1_800_000).toISOString() } });
+    }
+    return route.fulfill({ status: 404, json: { error: key } });
+  });
+  await page.goto('/print-list');
+  const row = (code: string) => page.locator('#print-rows tr', { hasText: code });
+  await expect(page.locator('#print-rows tr')).toHaveCount(3);
+
+  await row('A209900000013').getByRole('button', { name: '生成打印文件' }).click();
+  await expect(row('A209900000013').locator('button.requesting')).toContainText('打印文件请求中');
+  await expect(row('A209900000013').locator('button.requesting')).toBeDisabled();
+  release!();
+  const ready = row('A209900000013').getByRole('button', { name: '报销文件已就绪' });
+  await expect(ready).toBeVisible();
+  await expect(ready).toBeDisabled();
+  await expect(row('A209900000013').getByRole('button', { name: '打印', exact: true })).toBeEnabled();
+  await expect(row('A209900000013').getByRole('button', { name: '下载' })).toBeEnabled();
+
+  // 打印 opens the ready page apart from this one (noopener).
+  const popup = page.waitForEvent('popup');
+  await row('A209900000013').getByRole('button', { name: '打印', exact: true }).click();
+  const opened = await popup;
+  await opened.waitForURL(`**/print/ready/${'a'.repeat(24)}`);
+  // noopener: the print page cannot reach (or freeze) this one.
+  expect(await opened.evaluate(() => window.opener)).toBeNull();
+  await opened.close();
+  await expect(row('A209900000013').getByRole('button', { name: '已点击打印' })).toBeEnabled();
+  await expect(row('A209900000013').getByRole('button', { name: '打印', exact: true })).toHaveCount(0);
+
+  // Several at once: the ready one is not made again.
+  for (const code of ['A209900000013', 'A209900000014', 'D209900000036']) await row(code).locator('input[type=checkbox]').check();
+  await expect(page.locator('#print-prepare')).toHaveText('生成所选打印文件（2 张）');
+  await page.click('#print-prepare');
+  for (const code of ['A209900000014', 'D209900000036']) await expect(row(code).getByRole('button', { name: '报销文件已就绪' })).toBeVisible();
+  expect(made.sort()).toEqual(['a'.repeat(32), 'b'.repeat(32), 'c'.repeat(32)]);
+  await expect(page.locator('#print-prepare')).toHaveText('所选打印文件均已就绪');
+  await expect(page.locator('#print-prepare')).toBeDisabled();
 });

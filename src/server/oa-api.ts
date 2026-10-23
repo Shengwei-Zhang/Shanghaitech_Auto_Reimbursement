@@ -17,6 +17,19 @@ export { defaultLogin, savedCredentials, type LoginEvidence, type LoginHooks, ty
 /** A print document served under its token: the HTML page to print, or a PDF to save. */
 export interface PrintFile { body: string | Buffer; type: string; filename?: string }
 
+/** A ready 打印文件 stays this long, at most this many per browser. */
+const READY_MS = 30 * 60_000;
+const READY_MAX = 20;
+interface ReadyFile { bizId: string; billCode: string; html: string; pdf: Buffer; token: string; expires: number;
+  /** When its print page was first opened (the user clicked 打印). */
+  printedAt?: number }
+export interface ReadyInfo { bizId: string; billCode: string; printUrl: string; pdfUrl: string; filename: string; expiresAt: string;
+  /** 打印 has been clicked (its print page opened) at least once. */
+  printed: boolean }
+const readyInfo = (file: ReadyFile): ReadyInfo => ({ bizId: file.bizId, billCode: file.billCode, printUrl: `/print/ready/${file.token}`,
+  pdfUrl: `/print/ready/${file.token}.pdf`, filename: `${file.billCode}.pdf`, expiresAt: new Date(file.expires).toISOString(),
+  printed: file.printedAt !== undefined });
+
 /** The page's school login (OaSession) with what every 报销类型 shares: funds, invoice folders, suppliers,
  * printing. Each 报销类型 is a module of its own (apply-money-api.ts, travel-api.ts) registered in `types`;
  * a new one is added there, borrowing only the login (FormHost). */
@@ -33,11 +46,15 @@ export class OaApi extends OaSession {
   private printable = new Map<string, { billCode: string; print: 'yes' | 'no' | 'check' }>();
   /** Built print documents, served once each under an unguessable token for 10 minutes. */
   private printed = new Map<string, PrintFile & { expires: number }>();
+  /** 打印文件 made ahead, one per bill: its print page and PDF, opened as often as needed under one token until it
+   * expires (READY_MS) or the login ends. In memory only; at most READY_MAX per browser, the oldest gives way. */
+  private ready = new Map<string, ReadyFile>();
 
   protected onReset(): void {
     this.applyMoney.reset();
     this.printable.clear();
     this.printed.clear();
+    this.ready.clear();
   }
 
   status() {
@@ -190,6 +207,49 @@ export class OaApi extends OaSession {
     } catch (error) { this.fail(error); }
   }
 
+  /** Makes one bill's 打印文件 (its print page and a PDF) and keeps it ready; a bill already ready is returned as is. */
+  async prepareFile(body: unknown): Promise<ReadyInfo> {
+    const { bizId } = record(body);
+    const bill = typeof bizId === 'string' ? this.printable.get(bizId) : undefined;
+    if (!bill) throw new AppError(409, new PrintError('not_listed').message);
+    if (bill.print !== 'yes') throw new AppError(409, `报销单 ${bill.billCode} 当前不能打印。`);
+    this.dropExpired();
+    const known = this.ready.get(bizId as string);
+    if (known) return readyInfo(known);
+    try {
+      const page = await this.read((reader, query) => fetchPrintPageHttp(reader, query, bizId as string))
+        .catch(error => { throw error instanceof PrintError && error.code === 'not_printable' ? new PrintError('not_printable', `报销单 ${bill.billCode}：${error.message}`) : error; });
+      const html = combinePrintPages([{ billCode: bill.billCode, html: page }]);
+      const pdf = await (this.renderPdf ?? renderPrintPdf)(html)
+        .catch(() => { throw new AppError(500, `未能生成报销单 ${bill.billCode} 的 PDF，请稍后重试。`); });
+      const file: ReadyFile = { bizId: bizId as string, billCode: bill.billCode, html, pdf, token: randomBytes(18).toString('base64url'),
+        expires: Date.now() + READY_MS };
+      this.ready.set(file.bizId, file);
+      while (this.ready.size > READY_MAX) this.ready.delete([...this.ready.values()].sort((a, b) => a.expires - b.expires)[0].bizId);
+      return readyInfo(file);
+    } catch (error) { this.fail(error); }
+  }
+
+  /** The 打印文件 still ready, for the print page after a reload. */
+  readyFiles(): { files: ReadyInfo[] } {
+    this.dropExpired();
+    return { files: [...this.ready.values()].map(readyInfo) };
+  }
+
+  /** A ready 打印文件 by its token: the print page, or the PDF; not used up by opening it. */
+  takeReady(token: string, kind: 'html' | 'pdf'): PrintFile | undefined {
+    this.dropExpired();
+    const file = [...this.ready.values()].find(item => item.token === token);
+    if (!file) return undefined;
+    if (kind === 'html') file.printedAt ??= Date.now();
+    return kind === 'pdf' ? { body: file.pdf, type: 'application/pdf', filename: `${file.billCode}.pdf` } : { body: file.html, type: 'text/html; charset=utf-8' };
+  }
+
+  private dropExpired(): void {
+    const now = Date.now();
+    for (const [key, item] of this.ready) if (item.expires < now) this.ready.delete(key);
+  }
+
   /** Swapped out in tests; renders the joined print page to a PDF. */
   renderPdf?: (html: string) => Promise<Buffer>;
 
@@ -238,6 +298,8 @@ export async function handleOaRoute(api: OaApi, method: string, url: URL, body: 
     case 'GET /api/oa/print': return api.printList();
     case 'GET /api/oa/print/permission': return api.printPermission(url.searchParams.get('bizId'));
     case 'POST /api/oa/print': return api.printDocument(await body());
+    case 'POST /api/oa/print/file': return api.prepareFile(await body());
+    case 'GET /api/oa/print/files': return api.readyFiles();
     case 'GET /api/oa/funds': return api.funds(url.searchParams);
     case 'GET /api/oa/invoice-claim': return api.invoiceClaim(url.searchParams.get('number'));
     case 'GET /api/oa/folder-invoices': return api.folderInvoices();

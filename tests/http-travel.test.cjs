@@ -5,7 +5,7 @@ const { OaHttpClient } = require('../dist/automation/http-login.js');
 const { fillTravelFormHttp, legRow, easySearchRows, selectOptions, submitTravelFormHttp, validateTravelInput } = require('../dist/automation/travel/index.js');
 const { normalizeFormContext } = require('../dist/automation/reimbursement-context.js');
 
-// Shapes from the 2026-10-21 capture of D209900000037 (tmp/travel-capture, not committed).
+// Shapes from the 2026-10-21 capture of D209900000038 (tmp/travel-capture, not committed).
 const BIZ = '5E5AC766876E7758E0632D2A0F0AF09B';
 const TASK = 'dd838710-cd53-11f1-8913-525400cfaf12';
 const CSRF = '159BB12842D0416DB2346681665A567F';
@@ -16,7 +16,7 @@ const STAFF_TYPE = 'BCEF71B8970942AE920E29A7AF33AC4D', STUDENT_TYPE = 'E3CF8F58D
 const POPUP = 'cccccccc-1111-2222-3333-444444444444';
 const SECRET = { password: 'Pw3kLm9QzX1vB7nT', salt: 'Sa1tR4nD0mV4lu3s', iterations: 1000 };
 const URL_ = `https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=${BIZ}&taskId=${TASK}`;
-const FORM = { url: URL_, csrfToken: CSRF, procTaskId: TASK, documentNumber: 'D209900000037',
+const FORM = { url: URL_, csrfToken: CSRF, procTaskId: TASK, documentNumber: 'D209900000038',
   context: { bizId: BIZ, taskId: TASK, accountBook: 'ST00', reimbursementKind: 'domesticTravel' } };
 const LEG_OUT = { startDate: '2026-10-19', startAddress: '上海', arriveDate: '2026-10-20', arriveAddress: '北京', vehicle: 'aircraft',
   trafficExpense: '111', travelDays: 2, hotelExpense: '500', meetingAmount: '2400' };
@@ -37,7 +37,7 @@ const core = () => Buffer.from(`return (async function(){ let innerEncrypt = asy
 const EDITOR = `<input type="hidden" name="procInstId" id="jobPageProcInstId" value="dd82c3ba-cd53-11f1-8913-525400cfaf12">
 <input type="hidden" name="taskDefKey" id="jobPageTaskDefKey" value="Apply">
 <form class="hg-form" method="post" action="" id="submitForm">
-<input type="hidden" name="id" value="${BIZ}"><input type="text" name="billCode" value="D209900000037" readonly="readonly">
+<input type="hidden" name="id" value="${BIZ}"><input type="text" name="billCode" value="D209900000038" readonly="readonly">
 <input type="hidden" name="reimbursementKind" value="domesticTravel"><input type="hidden" name="accountBook" value="ST00">
 </form><input type="hidden" name="currencyKind" value="0" id="currencyKind"/>
 <input type="hidden" name="hasCtripBorrowAccount" value="true" id="hasCtripBorrowAccount"/>
@@ -190,14 +190,14 @@ function oa(overrides = {}) {
           reimbursementAmount: Math.round(stored.reduce((sum, row) => sum + Number(row.amount || 0), 0) * 100) / 100,
           settlementAmount: state.settles.reduce((sum, row) => sum + Number(row.paymentAmount), 0) } } });
       }
-      // 提交 → 流转确认, as captured on D209900000037.
+      // 提交 → 流转确认, as captured on D209900000038.
       case 'checkAdvanceBillInvoice.ajax': return json({ message: 'no', status: 0 });
       case 'showQueryHandlers.ajax': return json({ data: 'true', status: 0 });
       case 'queryHandlers.ajax': return json({ status: 0, data: { hasSelection: false, hasGatewayManual: 'false', procApprovalRuleFullName: '/网上预约报销审批',
         Rows: [['responsiblePerson', '经费负责人', '教师乙', '900002', 10], ['financialContactPerson', '学院财务联络人', '联络人戊', '102001', 50],
           ['financialApprovalPosition', '财务审核岗', '审核员己', '102002', 60]].map(([id, step, name, code, group]) => ({ subProcUnitId: id,
           subProcUnitName: step, handlerName: name, handlerId: `${code}@${'A'.repeat(32)}`, groupId: group, sendMessage: 1, bizId: BIZ,
-          bizCode: 'D209900000037' })) } });
+          bizCode: 'D209900000038' })) } });
       case 'queryAdvance.ajax': state.advanced = (state.advanced ?? 0) + 1; return json({ data: 'ok', status: 1 });
       default: throw new Error(`unexpected ${pathname}`);
     }
@@ -311,7 +311,7 @@ test('helpers read the captured fragments; D-prefixed 差旅单 numbers are kept
   assert.deepEqual(selectOptions(TRAVELLER_PAGE, 'travellerTypeId').map(item => item.label), ['教工', '学生', '校外']);
   assert.deepEqual(easySearchRows(person('2020000001', '李同学')), [{ id: '2020000001', code: '2020000001', name: '李同学' }]);
   assert.equal(legRow({ ...LEG_BACK, otherAmount: '12.5' }, 18000, '飞机').otherAmount, '12.50');
-  assert.equal(normalizeFormContext({ documentNumber: 'D209900000037' }).documentNumber, 'D209900000037');
+  assert.equal(normalizeFormContext({ documentNumber: 'D209900000038' }).documentNumber, 'D209900000038');
   assert.equal(normalizeFormContext({ documentNumber: 'X202610210026' }).documentNumber, '');
 });
 

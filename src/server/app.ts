@@ -167,13 +167,18 @@ export function createApp(options: AppOptions) {
           receiptConfigured: Boolean(options.siteProfile), stages: CONTRACTS });
       }
       const printToken = req.method === 'GET' ? url.pathname.match(/^\/print\/([\w-]{24})$/)?.[1] : undefined;
-      if (printToken) {
-        const file = sessions.require(cookie).api.takePrint(printToken);
-        if (!file) throw new AppError(404, '打印内容已过期或已打开过，请回到报销单打印页面重新点击。');
-        // OA's page: inline data images, inline styles (watermark layer), and only our print.js.
-        res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+      // A ready 打印文件 (/print/ready/<token>, or .pdf): opened as often as needed until it expires.
+      const ready = req.method === 'GET' ? url.pathname.match(/^\/print\/ready\/([\w-]{24})(\.pdf)?$/) : null;
+      if (printToken || ready) {
+        const api = sessions.require(cookie).api;
+        const file = ready ? api.takeReady(ready[1], ready[2] ? 'pdf' : 'html') : api.takePrint(printToken!);
+        if (!file) throw new AppError(404, ready ? '打印文件已过期，请回到报销单打印页面重新生成。' : '打印内容已过期或已打开过，请回到报销单打印页面重新点击。');
+        // A ready PDF opens in the browser's viewer unless it is asked for as a download.
+        const inline = ready && file.filename && url.searchParams.get('download') !== '1';
+        // OA's page: inline data images, inline styles (watermark layer), and only our print.js. A PDF keeps the site's policy.
+        if (file.type.startsWith('text/html')) res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
         res.writeHead(200, { 'Content-Type': file.type, ...(file.filename
-          ? { 'Content-Disposition': `attachment; filename="print.pdf"; filename*=UTF-8''${encodeURIComponent(file.filename)}` } : {}) });
+          ? { 'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="print.pdf"; filename*=UTF-8''${encodeURIComponent(file.filename)}` } : {}) });
         return res.end(file.body);
       }
       if (url.pathname.startsWith('/api/')) {

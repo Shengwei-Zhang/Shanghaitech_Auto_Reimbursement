@@ -2,7 +2,11 @@
 
 /** /print-list: the printable bills of 报销单查询, using the school login of the one-click page. */
 const $ = id => document.getElementById(id);
-const state = { csrf: '', rows: [], picked: new Set(), loading: 0, seq: 0, busy: new Map() };
+const state = { csrf: '', rows: [], picked: new Set(), loading: 0, seq: 0, busy: new Map(),
+  /** 打印文件 per bill: queued, requesting, ready (with its URLs) or failed. Kept across a reload of the list. */
+  files: new Map() };
+/** Bills whose 打印文件 are made at once (the server also limits its PDF renders). */
+const PREPARE_AT_ONCE = 2;
 const MAX_PICK = 20;
 
 async function api(method, path, body) {
@@ -88,6 +92,7 @@ async function load() {
     if (seq !== state.seq) return;
     const ask = rows.filter(row => row.print !== 'no');
     render();
+    loadReady();
     const scope = `最近 ${rows.length} 张已提交的报销单${total > rows.length ? `（共 ${total} 张）` : ''}`;
     let failed = 0;
     for (const [index, row] of ask.entries()) {
@@ -163,7 +168,10 @@ function render() {
   }
   const count = state.picked.size, working = state.busy.size > 0;
   $('print-go').disabled = !count || working;
-  $('print-go').textContent = count ? `打印所选（${count} 张）` : '打印所选';
+  $('print-go').textContent = count ? `合并打印所选（${count} 张）` : '合并打印所选';
+  const unready = [...state.picked].filter(id => !readyFile(id) && !['queued', 'requesting'].includes(state.files.get(id)?.status)).length;
+  $('print-prepare').disabled = !unready || working;
+  $('print-prepare').textContent = unready ? `生成所选打印文件（${unready} 张）` : count ? '所选打印文件均已就绪' : '生成所选打印文件';
   $('print-download').disabled = !count || working;
   $('print-download').textContent = count ? `下载所选（${count} 张）` : '下载所选';
   $('print-count').hidden = !count;
@@ -204,10 +212,109 @@ function actionsCell(row) {
     cell.append(note);
     return cell;
   }
-  cell.append(button('打印', `只打印 ${row.billCode}`, () => printBills([row.bizId])),
-    button('添加附件', '正在接入 OA 的添加附件流程', () => undefined, true),
-    button('下载', `下载 ${row.billCode} 的打印内容（PDF）`, () => downloadBills([row.bizId])));
+  const file = readyFile(row.bizId), entry = state.files.get(row.bizId);
+  if (file) {
+    // 报销文件已就绪: a state, not an action; 打印 and 下载 use the file made ahead.
+    const done = button('报销文件已就绪', `${row.billCode} 的打印文件已生成，${expiresIn(file)}内有效`, () => undefined, true);
+    done.classList.add('file-ready');
+    const print = button(file.printed ? '已点击打印' : '打印', file.printed ? `已点击过打印，可再次打印 ${row.billCode}` : `打印 ${row.billCode}`, () => openReady(file));
+    if (file.printed) print.classList.add('printed');
+    cell.append(done, print,
+      button('下载', `下载 ${row.billCode}.pdf`, () => saveReady(file)));
+  } else if (entry?.status === 'queued' || entry?.status === 'requesting') {
+    const waiting = button('', '', () => undefined, true);
+    waiting.classList.add('requesting');
+    if (entry.status === 'requesting') pending(waiting, '打印文件请求中…');
+    else waiting.textContent = '等待生成…';
+    cell.append(waiting);
+  } else {
+    const make = button(entry?.status === 'failed' ? '重新生成' : '生成打印文件',
+      entry?.status === 'failed' ? `上次未能生成：${entry.error}` : `在后台生成 ${row.billCode} 的打印文件（PDF）`, () => prepareFiles([row.bizId]));
+    make.classList.add('make');
+    cell.append(make);
+  }
+  cell.append(button('添加附件', '正在接入 OA 的添加附件流程', () => undefined, true));
   return cell;
+}
+
+/** The ready 打印文件 of a bill, if it has not expired. */
+function readyFile(bizId) {
+  const entry = state.files.get(bizId);
+  return entry?.status === 'ready' && Date.parse(entry.file.expiresAt) > Date.now() ? entry.file : undefined;
+}
+
+const expiresIn = file => `${Math.max(1, Math.round((Date.parse(file.expiresAt) - Date.now()) / 60_000))} 分钟`;
+
+/** Opened apart from this page (noopener), so its print dialog never freezes the list. */
+function openReady(file) {
+  if (!readyFile(file.bizId)) return expired(file);
+  window.open(file.printUrl, '_blank', 'noopener');
+  // The server records it too (the print page was opened), so a reload still shows 已点击打印.
+  file.printed = true;
+  render();
+}
+
+function saveReady(file) {
+  if (!readyFile(file.bizId)) return expired(file);
+  const link = document.createElement('a');
+  link.href = `${file.pdfUrl}?download=1`;
+  link.download = file.filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+function expired(file) {
+  state.files.delete(file.bizId);
+  render();
+  toast(`${file.billCode} 的打印文件已过期，请重新生成。`, true);
+}
+
+/** Makes the 打印文件 of each bill not ready yet, a few at a time; every row shows its own progress. */
+async function prepareFiles(ids) {
+  const todo = ids.filter(id => !readyFile(id) && !['queued', 'requesting'].includes(state.files.get(id)?.status));
+  if (!todo.length) return;
+  for (const id of todo) state.files.set(id, { status: 'queued' });
+  render();
+  const bills = id => state.rows.find(row => row.bizId === id)?.billCode ?? id;
+  let done = 0, failed = 0;
+  const status = () => pending($('print-status'), `正在生成打印文件：已完成 ${done} / ${todo.length}${failed ? `，${failed} 张未能生成` : ''}…`);
+  status();
+  const queue = [...todo];
+  await Promise.all(Array.from({ length: Math.min(PREPARE_AT_ONCE, queue.length) }, async () => {
+    while (queue.length) {
+      const id = queue.shift();
+      state.files.set(id, { status: 'requesting' });
+      render();
+      try {
+        const file = await api('POST', '/api/oa/print/file', { bizId: id });
+        state.files.set(id, { status: 'ready', file });
+        done++;
+      } catch (error) {
+        if (error.status === 401) {
+          for (const left of [id, ...queue.splice(0)]) state.files.delete(left);
+          return needLogin(error.message);
+        }
+        state.files.set(id, { status: 'failed', error: error.message });
+        failed++;
+        toast(`${bills(id)} 未能生成打印文件：${error.message}`, true);
+      }
+      status();
+      render();
+    }
+  }));
+  $('print-status').textContent = `打印文件已生成 ${done} 张${failed ? `，${failed} 张未能生成（可点“重新生成”）` : ''}；就绪后点“打印”直接打印，30 分钟内有效。`;
+  render();
+}
+
+/** 打印文件 the server still holds, e.g. after this page was reloaded. */
+async function loadReady() {
+  try {
+    const { files } = await api('GET', '/api/oa/print/files');
+    for (const [id, entry] of state.files) if (entry.status === 'ready') state.files.delete(id);
+    for (const file of files) state.files.set(file.bizId, { status: 'ready', file });
+    render();
+  } catch { /* the rows still work without them */ }
 }
 
 const pickedIds = () => state.rows.filter(row => state.picked.has(row.bizId)).map(row => row.bizId);
@@ -269,6 +376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('print-search').addEventListener('input', render);
   $('print-all').addEventListener('click', toggleAll);
   $('print-go').addEventListener('click', () => printBills(pickedIds()));
+  $('print-prepare').addEventListener('click', () => prepareFiles(pickedIds()));
   $('print-download').addEventListener('click', () => downloadBills(pickedIds()));
   try { state.csrf = (await api('GET', '/api/session')).csrfToken; }
   catch (error) { return show(error.message, true); }

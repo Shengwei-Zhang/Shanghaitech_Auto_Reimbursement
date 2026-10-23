@@ -37,10 +37,10 @@ test('payload reproduces supplied search defaults with a fresh timestamp and no 
     taskType: '', priority: '', isExpire: '', isIgnore: '0', _t: 123,
   });
   const before = Date.now();
-  const query = buildTodoSearchPayload({ pageNumber: 3, pageSize: 25, subject: ' A209900000014 ', isIgnore: '1' });
+  const query = buildTodoSearchPayload({ pageNumber: 3, pageSize: 25, subject: ' A209900000015 ', isIgnore: '1' });
   assert.equal(query.pageNumber, 3);
   assert.equal(query.pageSize, 25);
-  assert.equal(query.subject, 'A209900000014');
+  assert.equal(query.subject, 'A209900000015');
   assert.ok(query._t >= before && query._t <= Date.now());
   for (const options of [{ pageNumber: 0 }, { pageNumber: 1.5 }, { pageNumber: Infinity }, { pageSize: 101 },
     { pageSize: 0 }, { pageSize: '10' }, { type: 2 }, { _t: 1 }, { url: 'https://example.org' },
@@ -51,7 +51,7 @@ test('payload reproduces supplied search defaults with a fresh timestamp and no 
 
 test('in-page request uses fixed POST endpoint and browser cookies, without copied browser headers', async () => {
   const page = portal();
-  const result = await searchTodoTasks(page, { subject: 'A209900000014', pageNumber: 2 });
+  const result = await searchTodoTasks(page, { subject: 'A209900000015', pageNumber: 2 });
   assert.equal(page.calls.length, 1);
   const [url, request] = page.calls[0];
   assert.equal(url, TASK_SEARCH_ORIGIN + TASK_SEARCH_PATH);
@@ -61,7 +61,7 @@ test('in-page request uses fixed POST endpoint and browser cookies, without copi
   assert.equal(request.redirect, 'manual');
   assert.equal(request.cache, 'no-store');
   assert.deepEqual(Object.keys(request.headers).sort(), ['Accept', 'Content-Type']);
-  assert.equal(JSON.parse(request.body).subject, 'A209900000014');
+  assert.equal(JSON.parse(request.body).subject, 'A209900000015');
   assert.equal(JSON.parse(request.body).pageNumber, 2);
   assert.equal(result.httpStatus, 200);
   assert.deepEqual(JSON.parse(JSON.stringify(result.response)), { synthetic: { rows: [], count: 0 } });
@@ -146,15 +146,15 @@ const formLink = (bizId, taskId) => 'https://sapbpm-new.shanghaitech.edu.cn:9091
 test('todo targets come from BPM form links (also wrapped by SSO) or sibling bizId/taskId fields', () => {
   const sso = `https://ids.shanghaitech.edu.cn/authserver/login?service=${encodeURIComponent(formLink(bizB, taskB))}`;
   const response = { code: 0, data: { records: [
-    { subject: '报销单 A209900000015 待审批', url: formLink(bizA, taskA) },
-    { title: '单据A209900000016', pcUrl: sso },
-    { subject: 'A209900000017', extend: { bizId: bizC, taskId: taskA } },
+    { subject: '报销单 A209900000016 待审批', url: formLink(bizA, taskA) },
+    { title: '单据A209900000017', pcUrl: sso },
+    { subject: 'A209900000018', extend: { bizId: bizC, taskId: taskA } },
     { subject: '重复', url: formLink(bizA.toLowerCase(), taskA) },
-    { subject: 'A209900000018 与 A209900000019', url: formLink(bizC, taskB) },
+    { subject: 'A209900000019 与 A209900000020', url: formLink(bizC, taskB) },
   ] } };
   assert.deepEqual(extractTodoTargets(response).map(target => ({ ...target })), [
-    { bizId: bizA, taskId: taskA, documentNumber: 'A209900000015', source: 'link', kind: 'handling', path: '$.data.records[0]' },
-    { bizId: bizB, taskId: taskB, documentNumber: 'A209900000016', source: 'link', kind: 'handling', path: '$.data.records[1]' },
+    { bizId: bizA, taskId: taskA, documentNumber: 'A209900000016', source: 'link', kind: 'handling', path: '$.data.records[0]' },
+    { bizId: bizB, taskId: taskB, documentNumber: 'A209900000017', source: 'link', kind: 'handling', path: '$.data.records[1]' },
     { bizId: bizC, taskId: taskA, documentNumber: '', source: 'fields', kind: 'handling', path: '$.data.records[2].extend' },
     { bizId: bizC, taskId: taskB, documentNumber: '', source: 'link', kind: 'handling', path: '$.data.records[4]' },
   ]);
@@ -164,22 +164,22 @@ test('live portal envelope: handling todos are selectable, 通知任务 pointing
   // Shapes from the 2026-10-15 portal response; identifiers are synthetic.
   const notice = 'cccccccc-dddd-eeee-ffff-000000000000_abc';
   const response = { errcode: '0', errmsg: 'success', total: 3, pages: 1, datas: [
-    { subject: '张三[用款申请单-A209900000015](2026-10-14)', nodeName: '网上预约报销申请单', bizKey: bizA,
+    { subject: '张三[用款申请单-A209900000016](2026-10-14)', nodeName: '网上预约报销申请单', bizKey: bizA,
       taskId: 'portal-1', pcViewUrl: formLink(bizA, taskA), h5ViewUrl: formLink(bizA, taskA) },
-    { subject: '通知任务:网上报销打印通知：张三[A209900000015]', nodeName: '通知任务:网上预约报销单', bizKey: notice,
+    { subject: '通知任务:网上报销打印通知：张三[A209900000016]', nodeName: '通知任务:网上预约报销单', bizKey: notice,
       taskId: 'portal-2', pcViewUrl: formLink(bizA, taskB).replace('?', '?isReadOnly=true&') },
-    { subject: '通知任务:您提交的报销单[D209900000034]已被驳回!', nodeName: '网上预约报销单', bizKey: notice,
+    { subject: '通知任务:您提交的报销单[D209900000035]已被驳回!', nodeName: '网上预约报销单', bizKey: notice,
       pcViewUrl: formLink(bizB, taskB) },
     { subject: '合同审批申请', pcViewUrl: 'https://oa.shanghaitech.edu.cn/workflow/request/ViewRequest.jsp?requestid=1' },
   ] };
   const targets = extractTodoTargets(response);
   assert.deepEqual(targets.map(target => [target.bizId, target.taskId, target.documentNumber, target.kind]), [
-    [bizA, taskA, 'A209900000015', 'handling'],
-    [bizA, taskB, 'A209900000015', 'notification'],
+    [bizA, taskA, 'A209900000016', 'handling'],
+    [bizA, taskB, 'A209900000016', 'notification'],
     [bizB, taskB, '', 'notification'],
   ]);
-  assert.equal(selectTodoTarget(targets, 'A209900000015').taskId, taskA);
-  assert.throws(() => selectTodoTarget(targets.slice(1), 'A209900000015'), { code: 'target_missing' });
+  assert.equal(selectTodoTarget(targets, 'A209900000016').taskId, taskA);
+  assert.throws(() => selectTodoTarget(targets.slice(1), 'A209900000016'), { code: 'target_missing' });
 });
 
 test('non-BPM, wrong-path, duplicated-parameter and malformed links yield no target', () => {
@@ -188,7 +188,7 @@ test('non-BPM, wrong-path, duplicated-parameter and malformed links yield no tar
     link.replace(':9091', ''), link.replace('showLoadRbReimbursement.job', 'forwardAddRbReimbursement.do'),
     `${link}&bizId=${bizB}`, link.replace(taskA, 'not-a-task'), link.replace(bizA, 'A'.repeat(31)),
     `javascript:${link}`, `https://portal.invalid/#%E0%A4%A${encodeURIComponent(link)}`]) {
-    assert.deepEqual(extractTodoTargets({ url, subject: 'A209900000015' }), [], url);
+    assert.deepEqual(extractTodoTargets({ url, subject: 'A209900000016' }), [], url);
   }
   assert.deepEqual(extractTodoTargets({ bizId: bizA, taskId: 'x' }), []);
   assert.deepEqual(extractTodoTargets(null), []);
@@ -196,21 +196,21 @@ test('non-BPM, wrong-path, duplicated-parameter and malformed links yield no tar
 
 test('selection requires one target for the bill code and never guesses between candidates', () => {
   const named = (bizId, documentNumber) => ({ bizId, taskId: taskA, documentNumber, source: 'link', kind: 'handling', path: '$' });
-  const one = named(bizA, 'A209900000015'), other = named(bizB, 'A209900000016'), unnamed = named(bizC, '');
-  assert.equal(selectTodoTarget([one, other, unnamed], 'A209900000015'), one);
-  assert.equal(selectTodoTarget([unnamed], 'A209900000015'), unnamed);
-  assert.throws(() => selectTodoTarget([other, unnamed], 'A209900000015'), { code: 'target_missing' });
-  assert.throws(() => selectTodoTarget([], 'A209900000015'), { code: 'target_missing' });
-  assert.throws(() => selectTodoTarget([unnamed, named(bizA, '')], 'A209900000015'), { code: 'target_ambiguous' });
-  assert.throws(() => selectTodoTarget([one, named(bizB, 'A209900000015')], 'A209900000015'), { code: 'target_ambiguous' });
+  const one = named(bizA, 'A209900000016'), other = named(bizB, 'A209900000017'), unnamed = named(bizC, '');
+  assert.equal(selectTodoTarget([one, other, unnamed], 'A209900000016'), one);
+  assert.equal(selectTodoTarget([unnamed], 'A209900000016'), unnamed);
+  assert.throws(() => selectTodoTarget([other, unnamed], 'A209900000016'), { code: 'target_missing' });
+  assert.throws(() => selectTodoTarget([], 'A209900000016'), { code: 'target_missing' });
+  assert.throws(() => selectTodoTarget([unnamed, named(bizA, '')], 'A209900000016'), { code: 'target_ambiguous' });
+  assert.throws(() => selectTodoTarget([one, named(bizB, 'A209900000016')], 'A209900000016'), { code: 'target_ambiguous' });
 });
 
 test('CLI maps options, supports help and rejects unknown/missing/invalid values before browser startup', () => {
   assert.equal(parseTodoArgs(['--help']).help, true);
-  const { query } = parseTodoArgs(['--subject', 'A209900000014', '--page', '2', '--page-size', '20',
+  const { query } = parseTodoArgs(['--subject', 'A209900000015', '--page', '2', '--page-size', '20',
     '--biz-scene-code', 'TEST', '--start-time', '2026-10-01', '--end-time', '2026-10-14',
     '--task-type', 'TEST', '--priority', '1', '--is-expire', '0', '--is-ignore', '1']);
-  assert.equal(query.subject, 'A209900000014');
+  assert.equal(query.subject, 'A209900000015');
   assert.equal(query.pageNumber, 2);
   assert.equal(query.pageSize, 20);
   assert.equal(query.bizSceneCode, 'TEST');
@@ -256,7 +256,7 @@ test('CLI logs in, queries and closes its own browser without invoking reimburse
   });
   const workflow = t.mock.method(require('../dist/automation/reimbursement-flow'), 'runReimbursementFlowWithErrorHandling',
     async () => { throw Error('must not run'); });
-  await main(['--subject', 'A209900000014']);
+  await main(['--subject', 'A209900000015']);
   assert.equal(page.calls.length, 1);
   assert.equal(remember.mock.callCount(), 1);
   assert.equal(close.mock.callCount(), 1);

@@ -133,7 +133,7 @@ export async function prepareTravelInvoices(client: OaHttpClient, form: HttpForm
 }
 
 /** 关联发票: all invoices in one request, each for its full 可报余额; together they must cover `amount` (cents),
- * the payment less the subsidies, which need no invoice (D209900000033: payment 3130, invoices 2880). */
+ * the payment less the subsidies, which need no invoice (D209900000034: payment 3130, invoices 2880). */
 export async function linkTravelInvoices(send: TravelSend, form: HttpForm, invoices: TravelInvoice[],
   listed: Map<string, Record<string, unknown>>, amount: number): Promise<void> {
   const bizId = form.context.bizId;

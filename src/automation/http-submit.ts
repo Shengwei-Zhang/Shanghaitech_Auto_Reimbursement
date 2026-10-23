@@ -3,7 +3,7 @@ import type { HttpForm } from './http-bpm';
 import { BANK_TRANSFER, bizDataFields, cents, encodeFields, envelope, FILL_PATHS, fundingTabs, gridRows, HttpFillError, PERSONAL_CARD, post } from './http-fill';
 
 /** The requests the editor sends for 提交 and the 流转确认 “确定” (captured live 2026-10-15
- * on A209900000008, A209900000009 and A209900000023, see docs/http-fill.md). Only
+ * on A209900000008, A209900000009 and A209900000024, see docs/http-fill.md). Only
  * queryAdvance advances the workflow; it is sent once and never retried. */
 export const SUBMIT_PATHS = {
   checkAdvanceInvoice: '/bpm-new/rbReimbursement/checkAdvanceBillInvoice.ajax',
@@ -202,7 +202,7 @@ async function advanceHttp(client: OaHttpClient, call: SubmitCall, form: HttpFor
   if (text.trim()) {
     let reply: Record<string, unknown> | undefined;
     try { reply = record(JSON.parse(text)); } catch { /* not an envelope */ }
-    // Live 2026-10-15 (A209900000024/0140): OA now answers a successful advance this way.
+    // Live 2026-10-15 (A209900000025/0140): OA now answers a successful advance this way.
     if (String(reply?.status) === '1' && reply?.data === 'ok') return { rule: APPROVAL_RULE, route };
     const message = typeof reply?.message === 'string' ? reply.message.trim().slice(0, 300) : '';
     const response = `queryAdvance 响应：${text.replace(/\s+/g, ' ').trim().slice(0, 300)}`;

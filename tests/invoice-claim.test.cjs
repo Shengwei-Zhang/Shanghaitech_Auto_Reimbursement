@@ -60,7 +60,7 @@ test('a batch lookup reuses an invoice already in the folder and flags one that 
     queries.push(searchParams);
     const rows = [{ invoiceNumber: already, salerName: '上海盈科电子商务有限公司', invoiceDate: '2026-07-18', allValoremTax: 71.4, invoiceBalance: 71.4 },
       { invoiceNumber: reimbursed, salerName: '某公司', invoiceDate: '2026-07-01', allValoremTax: 10, invoiceBalance: 0,
-        electronicInvoice: { billEnOut: { billCodeList: 'A209900000024' } } }];
+        electronicInvoice: { billEnOut: { billCodeList: 'A209900000025' } } }];
     return json({ status: 0, data: { Total: rows.length, Rows: rows } });
   });
   const found = await claim.lookupInvoicesHttp(http, PAGE, [already, reimbursed, fresh]);
@@ -68,7 +68,7 @@ test('a batch lookup reuses an invoice already in the folder and flags one that 
   assert.equal(found[0].folderId, '9');
   assert.equal(found[0].amount, '71.40');
   assert.equal(found[0].seller, '上海盈科电子商务有限公司');
-  assert.deepEqual(found[1].documents, ['A209900000024']);
+  assert.deepEqual(found[1].documents, ['A209900000025']);
   assert.equal(found[2].state, 'absent');
   assert.deepEqual(queries.map(query => [query.get('page'), query.get('pagesize'), query.get('invoiceStatus')]),
     [['1', '100', '未报销']], '报销中 and 已报销 are not read: OA refuses such an invoice on upload');

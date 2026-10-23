@@ -21,7 +21,7 @@ const FORMATS: Record<keyof typeof FORM_CONTEXT_FIELDS, RegExp> = {
   bizId: /^[\da-f]{32}$/i,
   taskId: UUID,
   procInstId: UUID,
-  // A: 网上预约报销; D: 境内差旅单 (D209900000037, captured 2026-10-21).
+  // A: 网上预约报销; D: 境内差旅单 (D209900000038, captured 2026-10-21).
   documentNumber: /^[AD]\d{1,32}$/,
   processDefinitionKey: /^[A-Za-z][\w-]{0,99}$/,
   procInstStatusId: /^[A-Za-z][\w-]{0,49}$/,

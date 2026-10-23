@@ -96,7 +96,7 @@
 - 请求为 `POST /bpm-new/rbReimbursement/createReimbursement.ajax`，参数 `reimbursementKind`、`accountBook`、`accountBookName`，其中 `accountBookName` 经 BPM `Public.encodeURI` 两次编码。
 - 成功时返回 `{status:0, data}`，前端直接把 `data` 作为 `showLoadRbReimbursement.job` 的参数。程序要求 `data` 中有合法的 bizId 和 taskId，并打开新单核对隐藏字段。
 - 只发送一次，不重试；同一时间只允许一个创建请求。结果不明时提示先刷新列表查看，不自动重试。
-- 2026-10-15 实测：一键任务通过该接口新建了 A209900000024、A209900000025，并打开新单核对通过。
+- 2026-10-15 实测：一键任务通过该接口新建了 A209900000025、A209900000026，并打开新单核对通过。
 ## 实现与安全约束
 
 - 只在学校的三个 OA 主机之间手动跟随跳转；跳到其他地址（如微信扫码 `open.weixin.qq.com`）立即停止。

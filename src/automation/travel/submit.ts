@@ -3,7 +3,7 @@ import type { HttpForm } from '../http-bpm';
 import { BANK_TRANSFER, cents, encodeFields, envelope, fundingTabs, gridRows, HttpTravelError, PERSONAL_CARD, post, record,
   TRAVEL_KIND, TRAVEL_PATHS, travelBizFields } from './request';
 
-/** 提交 of a saved 境内差旅单, its own copy of the page's submit chain (captured on D209900000037, the
+/** 提交 of a saved 境内差旅单, its own copy of the page's submit chain (captured on D209900000038, the
  * same requests as 用款申请单): checkAdvanceBillInvoice → showQueryHandlers → saveBizData → queryHandlers
  * → the 流转确认 “确定” queryAdvance, sent once and never retried. */
 export const TRAVEL_APPROVAL_RULE = '/网上预约报销审批';

@@ -24,13 +24,14 @@
 
       <section id="print-card" class="card">
         <h2>需要打印的报销单 <span id="print-count" class="badge" hidden></span></h2>
-        <p class="hint small">向 OA“报销单查询”只查询状态为“提交”的最近 100 张报销单（含用款申请单、境内差旅单、采购预付及报销单等），再逐张向 OA 确认能否打印，只列出允许打印的。所选报销单合并成一个打印页面，每张单从新的一页开始，内容与 OA“打印”按钮相同，包括水印。</p>
+        <p class="hint small">向 OA“报销单查询”只查询状态为“提交”的最近 100 张报销单（含用款申请单、境内差旅单、采购预付及报销单等），再逐张向 OA 确认能否打印，只列出允许打印的。点“生成打印文件”在后台向 OA 读取并生成 PDF，就绪后点“打印”即可直接打印，30 分钟内可反复打印或下载；也可勾选多张一键生成。内容与 OA“打印”按钮相同，包括水印。</p>
         <div class="print-tools">
           <input id="print-search" type="search" placeholder="按单号、报销类别、事由、金额或日期筛选">
           <button id="print-all" type="button">全选</button>
           <button id="print-refresh" type="button">重新读取</button>
           <button id="print-download" type="button" disabled>下载所选</button>
-          <button id="print-go" type="button" class="primary" disabled>打印所选</button>
+          <button id="print-go" type="button" disabled>合并打印所选</button>
+          <button id="print-prepare" type="button" class="primary" disabled>生成所选打印文件</button>
         </div>
         <p id="print-status" class="hint small"></p>
         <div class="print-scroll">
@@ -44,7 +45,7 @@
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <footer class="site-footer">
-    <p>本项目旨在帮助各位同事便捷制作各种报销单。通过封装真实的 egate 数据接口，减少繁琐、冗余的操作，实现高效的办公。<span id="footer-contact" hidden>有任何问题请邮件联系 <a id="footer-email" href=""></a>。</span></p>
+    <p>本项目旨在帮助各位同事便捷制作各种报销单。通过封装真实的 egate 数据接口，减少繁琐、冗余的操作，实现高效的办公。<span id="footer-contact" hidden>有任何问题请邮件联系 <a id="footer-email" href=""></a></span></p>
   </footer>
   <script src="/footer.js" defer></script>
 </body>

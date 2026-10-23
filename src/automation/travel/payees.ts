@@ -4,7 +4,7 @@ import { parseSuppliers, sameName, supplierQuery } from '../http-payee';
 import { BANK_TRANSFER, cents, encodeFields, encryptPopupPayload, envelope, formFields, gridRows, HttpTravelError, parsePopupCipher,
   PERSONAL_CARD, record, TEXT_ACCEPT, TRAVEL_PATHS, yuan, type TravelSend } from './request';
 
-/** 收款人 of a 境内差旅单: one or more payment rows whose sum is 差旅合计 − 携程冲账, as on D209900000033
+/** 收款人 of a 境内差旅单: one or more payment rows whose sum is 差旅合计 − 携程冲账, as on D209900000034
  * (报销人甲 2,200 for the registration he paid, 教师丙 930 for subsidy and hotel). */
 export interface TravelPayee {
   /** card: 个人银行卡 to the 学号/工号 `code`; bank: 银行汇款 to the OA supplier `supplierCode` whose account name is `code`. */

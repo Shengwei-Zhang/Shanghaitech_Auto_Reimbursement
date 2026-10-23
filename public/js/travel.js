@@ -6,7 +6,7 @@ import { assessInvoices, invoiceTotal, renderInvoices } from './invoices.js';
 /* ---------- 境内差旅单: travellers and legs, saved over HTTP, never submitted ---------- */
 const TRAVEL = '境内差旅单';
 const TRAVELLER_KINDS = { staff: '教工', student: '学生' };
-/** 每日补贴标准, yuan: what OA returned for 教工/学生 travellers on D209900000037 (2026-10-21). OA states a
+/** 每日补贴标准, yuan: what OA returned for 教工/学生 travellers on D209900000038 (2026-10-21). OA states a
  * traveller's rate only once the traveller is saved on a form, so the page shows these; the fill uses
  * and checks OA's own rate. */
 const SUBSIDY_RATES = { staff: 180, student: 100 };

@@ -14,7 +14,7 @@ const POPUP = 'cccccccc-1111-2222-3333-444444444444';
 const SECRET = { password: 'Pw3kLm9QzX1vB7nT', salt: 'Sa1tR4nD0mV4lu3s', iterations: 1000 };
 const INVOICE = '26422000000000000001';
 const URL_ = `https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?bizId=${BIZ}&taskId=${TASK}`;
-const FORM = { url: URL_, csrfToken: CSRF, procTaskId: TASK, documentNumber: 'A209900000022',
+const FORM = { url: URL_, csrfToken: CSRF, procTaskId: TASK, documentNumber: 'A209900000023',
   context: { bizId: BIZ, taskId: TASK, accountBook: 'ST00', reimbursementKind: 'applyMoney' } };
 const INPUT = { fundingKind: 'authorized', fundingCode: 'P001', budgetName: '委托服务费', amount: '200', attachmentCount: 1,
   purpose: '大模型API使用费', reason: '大模型 API 费用 & 测试', payeeCode: '2025000001',
@@ -26,7 +26,7 @@ const core = (secret = SECRET) => Buffer.from(`return (async function(){ let inn
  combined.set(iv,0); return btoa(binary); }; })()`).toString('base64');
 const EDITOR = `<input type="hidden" id="jobPageProcInstId" value="900001"><input type="hidden" id="jobPageTaskDefKey" value="Apply">
 <form class="hg-form" method="post" action="" id="submitForm">
-<input type="hidden" name="id" value="${BIZ}"><input type="text" name="billCode" value="A209900000022" readonly="readonly">
+<input type="hidden" name="id" value="${BIZ}"><input type="text" name="billCode" value="A209900000023" readonly="readonly">
 <input type="hidden" name="fillinDate" value="2026-10-15"><input type="hidden" name="hasSchoolLeader" value="false">
 <input type="hidden" name="organName" value="上海科技大学&amp;测试"><input type="text" name="emali" value="">
 </form><input type="text" name="remark" id="reimbursementRemark">
@@ -317,20 +317,20 @@ test('an upload OA recognises as already claimed is not linked to the form', asy
   await assert.rejects(fillFormHttp(client, FORM, INPUT, fast), { code: 'invoice_claimed', partial: false });
   assert.deepEqual(writes(calls), ['uploadFillingInvoiceFiles.ajax'], 'a refused upload stops before anything is written to the form');
   const page = oa({ 'uploadFillingInvoiceFiles.ajax': async () => new Response(`<div class="alert alert-danger">当前票据发票.pdf（发票号码：${INVOICE}）`
-    + '已被报销，报销人[900001-测试]，报销单号[A209900000024]</div>') });
+    + '已被报销，报销人[900001-测试]，报销单号[A209900000025]</div>') });
   await assert.rejects(fillFormHttp(page.client, FORM, INPUT, fast), error => {
     assert.equal(error.code, 'invoice_claimed');
     assert.equal(error.partial, false);
     assert.match(error.message, new RegExp(`第 1 张发票 ${INVOICE}（发票\\.pdf） 已被报销`));
-    assert.match(error.message, /A209900000024/);
+    assert.match(error.message, /A209900000025/);
     return true;
   });
   // Live 2026-10-20: the bill code sits in brackets between 已被 and 报销使用.
   const live = oa({ 'uploadFillingInvoiceFiles.ajax': async () => new Response(`<h3>出现错误！</h3><p>以下为错误信息：</p><div>票据[${INVOICE}_上海科技大学_20261009204930.pdf]`
-    + '已被(报销人[900001-测试]，报销单号[A209900000029])报销使用</div><p>如果还是出错，请联系管理员提出您的问题，将得到满意的回答。</p>', { headers: { 'content-type': 'text/html;charset=utf-8' } }) });
+    + '已被(报销人[900001-测试]，报销单号[A209900000030])报销使用</div><p>如果还是出错，请联系管理员提出您的问题，将得到满意的回答。</p>', { headers: { 'content-type': 'text/html;charset=utf-8' } }) });
   await assert.rejects(fillFormHttp(live.client, FORM, INPUT, fast), error => {
     assert.equal(error.code, 'invoice_claimed');
-    assert.match(error.message, new RegExp(`第 1 张发票 ${INVOICE}（发票\\.pdf） 已被报销（报销单号 A209900000029），请删除这一张后重新提交。`));
+    assert.match(error.message, new RegExp(`第 1 张发票 ${INVOICE}（发票\\.pdf） 已被报销（报销单号 A209900000030），请删除这一张后重新提交。`));
     return true;
   });
 });
@@ -413,9 +413,9 @@ test('popup cipher literals are read without running the script, and payloads ro
 const { submitFormHttp } = require('../dist/automation/http-submit.js');
 const HANDLER_ROWS = [
   { subProcUnitId: 'responsiblePerson', subProcUnitName: '经费负责人', handlerName: '李四', handlerId: `100001@${'E'.repeat(32)}`,
-    groupId: 1, sendMessage: 1, bizId: BIZ, bizCode: 'A209900000022' },
+    groupId: 1, sendMessage: 1, bizId: BIZ, bizCode: 'A209900000023' },
   { subProcUnitId: 'financeAudit', subProcUnitName: '财务审核岗', handlerName: '王五', handlerId: `100999@${'F'.repeat(32)}`,
-    groupId: 2, sendMessage: 0, bizId: BIZ, bizCode: 'A209900000022' }];
+    groupId: 2, sendMessage: 0, bizId: BIZ, bizCode: 'A209900000023' }];
 const EXPECT = { fundingCode: 'P001', budgetName: '委托服务费', amount: '200', attachmentCount: 1, payeeCode: INPUT.payeeCode,
   invoiceNumbers: [INVOICE], reason: INPUT.reason, managerId: '100001' };
 
@@ -445,7 +445,7 @@ test('submitFormHttp re-reads the saved form, then sends the captured submit cha
   let validated;
   const result = await submitFormHttp(client, FORM, EXPECT, { progress: step => steps.push(step), validated: summary => { validated = summary; } });
   assert.deepEqual(steps, ['verify', 'route', 'advance']);
-  assert.deepEqual(validated, { documentNumber: 'A209900000022', amount: '200.00' });
+  assert.deepEqual(validated, { documentNumber: 'A209900000023', amount: '200.00' });
   assert.deepEqual(result.route.map(item => item.handler), ['李四', '王五']);
   assert.deepEqual(submitCalls(calls), ['checkAdvanceBillInvoice.ajax', 'showQueryHandlers.ajax', 'saveBizData.ajax',
     'queryHandlers.ajax', 'queryAdvance.ajax']);
@@ -509,7 +509,7 @@ test('uploads go out together like the OA page; a refused one stops before the f
     await new Promise(resolve => setTimeout(resolve, 20));
     inFlight--;
     if (refuse && Buffer.from(call.raw).toString('utf8').includes(refuse)) {
-      return new Response(`<div>票据[${refuse}_x.pdf]已被(报销人[900001-测试]，报销单号[A209900000032])报销使用</div>`);
+      return new Response(`<div>票据[${refuse}_x.pdf]已被(报销人[900001-测试]，报销单号[A209900000033])报销使用</div>`);
     }
   };
   const together = oa({ 'uploadFillingInvoiceFiles.ajax': slow() });
@@ -521,7 +521,7 @@ test('uploads go out together like the OA page; a refused one stops before the f
   await assert.rejects(fillFormHttp(refused.client, FORM, input, fast), error => {
     assert.equal(error.code, 'invoice_claimed');
     assert.equal(error.partial, false);
-    assert.match(error.message, /第 2 张发票 26422000000000000012（发票2\.pdf） 已被报销（报销单号 A209900000032）/);
+    assert.match(error.message, /第 2 张发票 26422000000000000012（发票2\.pdf） 已被报销（报销单号 A209900000033）/);
     return true;
   });
   assert.deepEqual(writes(refused.calls).filter(name => name !== 'uploadFillingInvoiceFiles.ajax'), [], 'nothing written to the form');

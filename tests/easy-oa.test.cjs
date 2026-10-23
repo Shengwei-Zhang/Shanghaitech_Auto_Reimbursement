@@ -18,7 +18,7 @@ const FOLDER_ROWS = [
   { invoiceNumber: WHOLE, salerName: '某商贸公司', invoiceDate: '2026-09-08 00:00:00', allValoremTax: 300, invoiceBalance: 300,
     billClaimState: 'UNDOING', invoiceFilesName: 'whole.pdf', billCheckStateTextView: '查验通过' },
   { invoiceNumber: PART, salerName: '某酒店', invoiceDate: '2026-08-18 00:00:00', allValoremTax: 960, invoiceBalance: 60,
-    billClaimState: 'UNDOING', electronicInvoice: { billEnOut: { billCodeList: 'D209900000036', totalActualAmount: 900 } } },
+    billClaimState: 'UNDOING', electronicInvoice: { billEnOut: { billCodeList: 'D209900000037', totalActualAmount: 900 } } },
   { invoiceNumber: SAME_DAY, salerName: '某商贸公司', invoiceDate: '2026-09-08 00:00:00', allValoremTax: 200, invoiceBalance: 200, billClaimState: 'UNDOING' },
   { invoiceNumber: '', allValoremTax: 0, invoiceBalance: 0 },
 ];
@@ -65,7 +65,7 @@ function fakeOa({ createResponse } = {}) {
       remark: '已填写', reimbursementAmount: 4820, attachmentNumber: 3 },
     { id: 'a'.repeat(32), billCode: 'A209900000013', status: '1', statusTextView: '提交' },
     { id: 'e'.repeat(32), billCode: 'A209900000011', status: '5', statusTextView: '已完成', reimbursementAmount: 345, remark: '已报销', fillinDate: '2026-10-01 09:00:00' },
-    { id: 'c'.repeat(32), billCode: 'D209900000035', status: 1, statusTextView: '提交', reimbursementKind: 'domesticTravel',
+    { id: 'c'.repeat(32), billCode: 'D209900000036', status: 1, statusTextView: '提交', reimbursementKind: 'domesticTravel',
       reimbursementKindTextView: '境内差旅单', reimbursementAmount: 1200, remark: '出差', fillinDate: '2026-09-04 10:00:00' }];
   const fetchImpl = async (url, init) => {
     const { pathname, searchParams } = new URL(url);
@@ -82,7 +82,7 @@ function fakeOa({ createResponse } = {}) {
       return json({ status: 0, data: { id: TASK, businessKey: BIZ, businessCode: 'A209900000010', statusId: 'ready', taskDefKey: 'Apply' } });
     }
     if (pathname.endsWith('showLoadRbReimbursement.job')) {
-      return new Response(searchParams.get('bizId') === NEW_BIZ ? form(NEW_BIZ, NEW_TASK, 'A209900000022') : form(BIZ, TASK, 'A209900000010'));
+      return new Response(searchParams.get('bizId') === NEW_BIZ ? form(NEW_BIZ, NEW_TASK, 'A209900000023') : form(BIZ, TASK, 'A209900000010'));
     }
     if (pathname === '/custom/api/v2/casp-tdc/task/search') {
       const link = (biz, task) => `https://sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursement/showLoadRbReimbursement.job?isReadOnly=false&bizId=${biz}&taskId=${task}`;
@@ -161,7 +161,7 @@ function fakeOa({ createResponse } = {}) {
 test('createReimbursementHttp posts once with the entry csrfToken and verifies the new form', async () => {
   const { calls, client } = fakeOa();
   const created = await bpm.createReimbursementHttp(client, 'applyMoney');
-  assert.equal(created.documentNumber, 'A209900000022');
+  assert.equal(created.documentNumber, 'A209900000023');
   const posts = calls.filter(call => call.pathname.endsWith('createReimbursement.ajax'));
   assert.equal(posts.length, 1);
   assert.equal(posts[0].headers.csrfToken, CSRF);
@@ -293,7 +293,7 @@ test('easy page API: login, applyMoney forms, select, create, funds and subjects
 
   assert.equal((await call('POST', '/api/oa/forms', {})).status, 400, 'creation needs confirmation');
   const created = await call('POST', '/api/oa/forms', { kind: 'domesticTravel', confirmed: true });
-  assert.equal(created.data.form.documentNumber, 'A209900000022');
+  assert.equal(created.data.form.documentNumber, 'A209900000023');
   assert.equal(oa.calls.find(call => call.pathname.endsWith('createReimbursement.ajax')).body.get('reimbursementKind'), 'applyMoney',
     'only 用款申请单 is created');
 
@@ -497,7 +497,7 @@ test('invoices already in an OA folder are listed, picked and linked without a P
   const { invoices } = (await call('GET', '/api/oa/folder-invoices')).data;
   assert.deepEqual(invoices.map(item => [item.number, item.amount, item.balance, item.selectable]),
     [[WHOLE, '300.00', '300.00', true], [PART, '960.00', '60.00', false], [SAME_DAY, '200.00', '200.00', true]], 'rows without a number are dropped');
-  assert.match(invoices[1].reason, /D209900000036/);
+  assert.match(invoices[1].reason, /D209900000037/);
   assert.equal(invoices[0].date, '2026-09-08');
   const pick = number => ({ folderId: '1879423340632997890', number });
   const input = amount => ({ ...claim().input, amount });
@@ -531,7 +531,7 @@ test('报销单打印: only 提交 bills of every type, filtered by OA; the join
   assert.equal(query.get('queryStatusKind'), '1', 'OA filters by 状态 = 提交');
   assert.equal(query.get('pagesize'), '100');
   assert.deepEqual(listed.data.rows.map(row => [row.billCode, row.kind, row.print]),
-    [['A209900000013', '', 'check'], ['D209900000035', '境内差旅单', 'check']], 'other bill types are listed too');
+    [['A209900000013', '', 'check'], ['D209900000036', '境内差旅单', 'check']], 'other bill types are listed too');
   assert.equal(listed.data.rows[1].date, '2026-09-04');
   const inApproval = 'a'.repeat(32), travel = 'c'.repeat(32);
 
@@ -568,6 +568,54 @@ test('报销单打印: only 提交 bills of every type, filtered by OA; the join
   assert.match(file.headers.get('content-disposition'), /^attachment; .*filename\*=UTF-8''A209900000013\.pdf$/);
   assert.match(Buffer.from(await file.arrayBuffer()).toString(), /^%PDF-1\.7 synthetic \d+$/);
   assert.equal((await call('POST', '/api/oa/print', { bizIds: [inApproval], format: 'docx' })).status, 400);
+});
+
+test('打印文件: made ahead per bill, opened again and again until it expires; only allowed bills, only this session', async t => {
+  const { call, base, headers, oa } = await easyServer(t);
+  await call('GET', '/api/oa/print');
+  const inApproval = 'a'.repeat(32), travel = 'c'.repeat(32);
+  assert.equal((await call('POST', '/api/oa/print/file', { bizId: inApproval })).status, 409, '提交 needs the OA permission check first');
+  assert.equal((await call('POST', '/api/oa/print/file', { bizId: 'e'.repeat(32) })).status, 409, 'not listed');
+  await call('GET', `/api/oa/print/permission?bizId=${travel}`);
+  assert.equal((await call('POST', '/api/oa/print/file', { bizId: travel })).status, 409, 'OA refused this one');
+  assert.deepEqual((await call('GET', '/api/oa/print/files')).data, { files: [] });
+
+  await call('GET', `/api/oa/print/permission?bizId=${inApproval}`);
+  const made = await call('POST', '/api/oa/print/file', { bizId: inApproval });
+  assert.equal(made.status, 200, JSON.stringify(made.data));
+  assert.equal(made.data.billCode, 'A209900000013');
+  assert.equal(made.data.filename, 'A209900000013.pdf');
+  assert.match(made.data.printUrl, /^\/print\/ready\/[\w-]{24}$/);
+  assert.equal(made.data.pdfUrl, `${made.data.printUrl}.pdf`);
+  assert.equal(made.data.printed, false);
+  const fetched = () => oa.calls.filter(item => item.pathname.endsWith('printRbReimbursement.load')).length;
+  assert.equal(fetched(), 1);
+  assert.deepEqual((await call('POST', '/api/oa/print/file', { bizId: inApproval })).data, made.data, 'a ready bill is not fetched again');
+  assert.equal(fetched(), 1);
+  assert.deepEqual((await call('GET', '/api/oa/print/files')).data.files, [made.data], 'listed for a reload of the page');
+  const pdfFirst = await fetch(`${base}${made.data.pdfUrl}?download=1`, { headers: { Cookie: headers.Cookie } });
+  assert.equal(pdfFirst.status, 200);
+  assert.equal((await call('GET', '/api/oa/print/files')).data.files[0].printed, false, 'a download is not a print');
+
+  const cookie = { headers: { Cookie: headers.Cookie } };
+  assert.equal((await fetch(`${base}${made.data.printUrl}`)).status, 401, 'needs the local session');
+  for (let i = 0; i < 2; i++) {
+    const page = await fetch(`${base}${made.data.printUrl}`, cookie);
+    assert.equal(page.status, 200, 'the print page opens more than once');
+    assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
+    assert.ok((await page.text()).includes(`base64,${inApproval}`));
+  }
+  assert.equal((await call('GET', '/api/oa/print/files')).data.files[0].printed, true, '打印 was clicked: kept for a reload');
+  const viewed = await fetch(`${base}${made.data.pdfUrl}`, cookie);
+  assert.equal(viewed.headers.get('content-type'), 'application/pdf');
+  assert.match(viewed.headers.get('content-disposition'), /^inline; .*A209900000013\.pdf$/, 'opens in the browser');
+  assert.match(Buffer.from(await viewed.arrayBuffer()).toString(), /^%PDF-1\.7 synthetic \d+$/);
+  const saved = await fetch(`${base}${made.data.pdfUrl}?download=1`, cookie);
+  assert.match(saved.headers.get('content-disposition'), /^attachment; /);
+  assert.equal((await fetch(`${base}/print/ready/${'x'.repeat(24)}`, cookie)).status, 404);
+
+  await call('POST', '/api/oa/logout');
+  assert.equal((await fetch(`${base}${made.data.printUrl}`, cookie)).status, 404, 'the login ending drops its files');
 });
 
 test('银行转账: the page finds the account among OA suppliers by exact name; the job input keeps the choice', async t => {
@@ -636,11 +684,11 @@ test('境内差旅单 on the easy page: its own budget query, bad input or disab
   assert.deepEqual((await call('GET', '/api/oa/travel')).data, { run: null });
 
   // Reusable drafts: the applicant's blank 境内差旅单 only (not the submitted one, not 用款申请单).
-  oa.ownerRows.push({ ...blankContent(), id: 'f'.repeat(32), billCode: 'D209900000038', status: 0, reimbursementKind: 'domesticTravel',
+  oa.ownerRows.push({ ...blankContent(), id: 'f'.repeat(32), billCode: 'D209900000039', status: 0, reimbursementKind: 'domesticTravel',
     statusTextView: '预制', fillinDate: '2026-10-21 21:40:00' });
-  assert.deepEqual((await call('GET', '/api/oa/travel/forms')).data, { forms: [{ documentNumber: 'D209900000038', date: '2026-10-21' }] });
+  assert.deepEqual((await call('GET', '/api/oa/travel/forms')).data, { forms: [{ documentNumber: 'D209900000039', date: '2026-10-21' }] });
   const fixed = { ...input, travellers: [{ ...input.travellers[0], legs: [{ ...input.travellers[0].legs[0], arriveDate: '2026-10-21' }] }] };
-  const unlisted = await call('POST', '/api/oa/travel', { confirmed: true, input: fixed, documentNumber: 'D209900000039' });
+  const unlisted = await call('POST', '/api/oa/travel', { confirmed: true, input: fixed, documentNumber: 'D209900000040' });
   assert.equal(unlisted.status, 409);
   assert.equal((await call('POST', '/api/oa/travel', { confirmed: true, input: fixed, documentNumber: 'A209900000010' })).status, 400);
   assert.equal((await call('POST', '/api/oa/travel', { confirmed: true, action: 'publish', input: fixed })).status, 400, 'only save or submit');

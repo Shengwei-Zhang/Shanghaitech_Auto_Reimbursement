@@ -12,7 +12,7 @@ const { parseOpenArgs, main } = require('../dist/open');
 // realm against a tiny DOM fixture; no real browser or HTTP request is involved.
 const target = {
   bizId: 'A'.repeat(32), taskId: '11111111-2222-3333-4444-555555555555',
-  expectedDocumentNumber: 'A209900000015',
+  expectedDocumentNumber: 'A209900000016',
 };
 const expectedUrl = buildReimbursementUrl(target);
 const args = ['--biz-id', target.bizId, '--task-id', target.taskId,
@@ -173,7 +173,7 @@ test('rejects wrong origin, port, path, IDs, duplicate parameters and read-only 
 });
 
 test('rejects a different document number instead of reporting that the requested form opened', async () => {
-  const fixture = browserFixture([{ text: '单据编号：A209900000021' }]);
+  const fixture = browserFixture([{ text: '单据编号：A209900000022' }]);
   await assert.rejects(openReimbursementByIds(fixture.session, fixture.ctx, target, 20), { code: 'document_mismatch' });
   assert.equal(fixture.calls.gotos.length, 1);
   assert.equal(fixture.ctx.state.openedFromTodo, false);
@@ -183,7 +183,7 @@ test('hidden job fields must name the requested document; absent fields fall bac
   for (const [hidden, code] of [
     [{ ...hiddenFields, jobPageBizId: 'B'.repeat(32) }, 'wrong_target'],
     [{ ...hiddenFields, jobPageId: '66666666-7777-8888-9999-000000000000' }, 'wrong_target'],
-    [{ ...hiddenFields, jobPageBizCode: 'A209900000021' }, 'ambiguous_form'],
+    [{ ...hiddenFields, jobPageBizCode: 'A209900000022' }, 'ambiguous_form'],
   ]) {
     const fixture = browserFixture([{ hidden }]);
     await assert.rejects(openReimbursementByIds(fixture.session, fixture.ctx, target, 20), { code });
@@ -251,7 +251,7 @@ test('unknown pages, creation menus and hidden form controls cannot count as an 
 
 test('multiple document numbers or multiple matching frames are ambiguous', async () => {
   for (const state of [
-    { text: `单据编号：${target.expectedDocumentNumber}\n单据编号：A209900000016` },
+    { text: `单据编号：${target.expectedDocumentNumber}\n单据编号：A209900000017` },
     { frames: [{ url: expectedUrl }] },
   ]) {
     const fixture = browserFixture([state]);

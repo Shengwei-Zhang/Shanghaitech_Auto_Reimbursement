@@ -5,6 +5,21 @@ import { getEnvValue } from '../automation/config';
  * @page and page-break rules, the watermark layer as a printed background). The page has
  * only inline images, so scripts are off and every network request is refused. */
 export async function renderPrintPdf(html: string): Promise<Buffer> {
+  // Each render starts a headless Chrome: at most RENDERS_AT_ONCE for the whole server, the rest wait in turn.
+  if (rendering >= RENDERS_AT_ONCE) await new Promise<void>(resolve => waiting.push(resolve));
+  rendering++;
+  try { return await render(html); }
+  finally {
+    rendering--;
+    waiting.shift()?.();
+  }
+}
+
+const RENDERS_AT_ONCE = 2;
+let rendering = 0;
+const waiting: Array<() => void> = [];
+
+async function render(html: string): Promise<Buffer> {
   const { chromium } = await import('playwright');
   const systemChrome = getEnvValue('PLAYWRIGHT_EXECUTABLE_PATH') || getEnvValue('CHROME_EXECUTABLE_PATH')
     || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

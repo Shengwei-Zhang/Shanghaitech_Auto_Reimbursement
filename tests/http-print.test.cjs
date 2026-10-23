@@ -14,7 +14,7 @@ const OA_PAGE = `<!DOCTYPE html><html><head>
 <script type="text/javascript">$(document).ready(function () { if(!$.isMobile()){ window.print(); } });</script>
 </head><body><div class="container-fluid">
 <div class="hg-form" align="center"><div class="page-break" style="page-break-before: auto;"><div class="page-image"><img src="${JPEG}" /></div></div></div>
-<div class="hg-form" align="center"><div class="page-break"><div class="page-header"><div>A209900000026 - 电子发票附件</div></div>
+<div class="hg-form" align="center"><div class="page-break"><div class="page-header"><div>A209900000027 - 电子发票附件</div></div>
 <div class="page-image"><img src="${JPEG}" onload="steal()" /><div class="watermark-tile" style="background-image: url('data:image/svg+xml;utf8,<svg></svg>');"></div>
 <img src="https://evil.example/x.png"><script>alert(1)</script></div><div class="page-footer">电子发票[26442000007291976941] 第 1 页</div></div></div>
 </div></body></html>`;
@@ -63,7 +63,7 @@ test('the permission check reads {"data":{"success":true}}', async () => {
 });
 
 test('combined print page keeps OA pages and styles, drops scripts, handlers and remote images', () => {
-  const html = print.combinePrintPages([{ billCode: 'A209900000026', html: OA_PAGE }, { billCode: 'A209900000027', html: OA_PAGE }]);
+  const html = print.combinePrintPages([{ billCode: 'A209900000027', html: OA_PAGE }, { billCode: 'A209900000028', html: OA_PAGE }]);
   assert.equal((html.match(/<section class="bill"/g) || []).length, 2);
   assert.equal((html.match(/page-break-before:always"/g) || []).length, 1, 'every bill after the first starts a new sheet');
   assert.equal((html.match(/src="data:image\/jpeg/g) || []).length, 4);

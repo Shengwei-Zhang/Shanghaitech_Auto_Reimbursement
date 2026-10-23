@@ -49,7 +49,7 @@ Easy 页面登录后，“只保存”和“保存后提交流转”都不启动
 
 失败处理：任一回执不符即停止、不重试。尚未发出写请求时任务记为失败（本单未改动）；已发出写请求则记为需人工核对，并在事件中写明停在哪一步。
 
-## 提交（2026-10-15 在 A209900000023 上实测并抓包）
+## 提交（2026-10-15 在 A209900000024 上实测并抓包）
 
 “保存后提交流转”时，接口先填写并保存，再启动浏览器以 `submitOnly` 方式打开同一张单：等发票表和金额加载后逐项回读核对，点击“提交”，核对流转确认的审批规则与路线，再单次点击“确定”。浏览器点击“提交”和“确定”时发出的请求：
 
@@ -70,7 +70,7 @@ Easy 页面登录后，“只保存”和“保存后提交流转”都不启动
 1. 回读本单：编辑页只有一个经费页签，且编号和金额与任务一致；经费明细只有一行，金额、附件数和预算科目一致；发票集合与任务完全相同；付款只有一行“个人银行卡”，工号和金额一致。
 2. `checkAdvanceBillInvoice` 必须返回 `no`，`showQueryHandlers` 必须返回 `"true"`；之后的 `saveBizData`（`budgetOutlays=[]`、`showTips=false`）回执金额和附件数须一致。
 3. `queryHandlers` 核验：审批规则为 `/网上预约报销审批`，无需手工选择分支或处理人（`hasSelection=false`、`hasGatewayManual=false`），每行处理人完整且 bizId/单号属于本单，“经费负责人”恰有一位，其 handlerId 以所选经费的 `firstId` 开头（2026-10-15 已用两个不同负责人的经费实抓核对）。
-4. 只发送一次 `queryAdvance`：字段与 `queryHandlers` 相同，另加 `procUnitHandlers`（第 3 步的 Rows 加上表格附带的 `canMerge=0`、`merged=0`、`__id`、`__isEditor`，两次编码）和 `hasGatewayManual`。响应为空（早先抓包）或 `{"data":"ok","status":1}`（2026-10-15 A209900000024/0140 实测）表示 OA 已接受；`status 2` 加 message 为拒绝；网络中断或其他响应为“结果未知”。不论哪种结果都不重试。
+4. 只发送一次 `queryAdvance`：字段与 `queryHandlers` 相同，另加 `procUnitHandlers`（第 3 步的 Rows 加上表格附带的 `canMerge=0`、`merged=0`、`__id`、`__isEditor`，两次编码）和 `hasGatewayManual`。响应为空（早先抓包）或 `{"data":"ok","status":1}`（2026-10-15 A209900000025/0140 实测）表示 OA 已接受；`status 2` 加 message 为拒绝；网络中断或其他响应为“结果未知”。不论哪种结果都不重试。
 5. 回执：OA 的回复不属于上述任何一种时，响应内容写入任务记录，同样以“报销单查询”为准。在“报销单查询”中按单号读取，状态为“提交”且金额一致才把任务记为“已提交并核验”。拒绝后状态仍为“预制”时记为 `http_submit_rejected`；其余情况记为需人工核对（`submission_unknown`）。queryAdvance 之前停止的记为 `http_submit_blocked` 或 `submission_route_unverified`，单据仍为预制。
 
 只读核对脚本：`tmp/live-readonly-fill.cjs <bizId> <taskId> <工号>` 在已保存的单据上实测弹窗页与加密查询，不发送写请求。

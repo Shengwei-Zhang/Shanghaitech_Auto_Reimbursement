@@ -357,3 +357,11 @@ body > #app, body > .login-screen { flex:1 0 auto; }
 .site-footer { margin-top:auto; padding:14px 16px 18px; border-top:1px solid var(--line); text-align:center; color:var(--muted); font-size:12px; line-height:1.7; }
 .site-footer p { margin:0 auto; max-width:900px; }
 .site-footer a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
+
+/* 报销单打印: a row's 打印文件 — 生成, 请求中, 报销文件已就绪 (a state, not a button to press). */
+.print-table td.actions button.make { font-weight:650; }
+.print-table td.actions button.requesting:disabled { color:var(--muted); opacity:1; cursor:progress; }
+.print-table td.actions button.file-ready:disabled { opacity:1; cursor:default; text-decoration:none; color:var(--lime-ink);
+  background:var(--lime-soft); border:1px solid #d8e6a0; border-radius:999px; padding:1px 9px; }
+.print-table th.actions { width:300px; }
+.print-table td.actions button.printed { color:var(--muted); }

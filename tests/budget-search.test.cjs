@@ -290,8 +290,8 @@ test('CLI validates explicit project and original-form IDs, optional parameters 
   const keyword = parseBudgetArgs(['--funding-keyword', ' 合成项目 ', ...cliArgs.slice(2)]);
   assert.equal(keyword.fundingKeyword, '合成项目');
   assert.equal(keyword.query.fundingItemsCode, '');
-  const byNumber = parseBudgetArgs(['--funding-code', syntheticFundingCode, '--document-number', 'A209900000015']);
-  assert.equal(byNumber.documentNumber, 'A209900000015');
+  const byNumber = parseBudgetArgs(['--funding-code', syntheticFundingCode, '--document-number', 'A209900000016']);
+  assert.equal(byNumber.documentNumber, 'A209900000016');
   assert.equal(byNumber.target, undefined);
   for (const args of [[], ['--funding-code', syntheticFundingCode], [...cliArgs, '--page', '1.5'],
     [...cliArgs, '--page-size', '0'], [...cliArgs, '--cookie', 'do-not-accept'],
@@ -364,13 +364,13 @@ test('CLI resolves the form from the todo list and the funding code from the lis
   t.mock.method(browser, 'closeBrowserSession', async () => { events.push('close'); });
   t.mock.method(require('../dist/automation/auth'), 'authenticateSchool', async () => f.page);
   t.mock.method(require('../dist/automation/reimbursement-list'), 'resolveListTarget', async (received, documentNumber, isReadOnly) => {
-    assert.equal(received, session); assert.equal(documentNumber, 'A209900000015'); events.push('todo');
+    assert.equal(received, session); assert.equal(documentNumber, 'A209900000016'); events.push('todo');
     return { target: { bizId: 'B'.repeat(32), taskId: '11111111-2222-3333-4444-555555555555', isReadOnly,
       expectedDocumentNumber: documentNumber }, row: { statusText: '预制' }, task: { name: '申请', statusId: 'ready' } };
   });
   t.mock.method(require('../dist/automation/open-reimbursement'), 'openReimbursementByIds', async (_session, ctx, target) => {
     assert.deepEqual(target, { bizId: 'B'.repeat(32), taskId: '11111111-2222-3333-4444-555555555555',
-      isReadOnly: false, expectedDocumentNumber: 'A209900000015' });
+      isReadOnly: false, expectedDocumentNumber: 'A209900000016' });
     ctx.setActiveFrame(f.frame); events.push('open');
   });
   const funding = require('../dist/automation/funding-search');
@@ -380,14 +380,14 @@ test('CLI resolves the form from the todo list and the funding code from the lis
     assert.equal(ctx.root(), f.frame); kinds.push(options.kind); events.push('funds');
     return { list: { items: projects, skipped: 0 } };
   });
-  await main(['--funding-keyword', '教学', '--document-number', 'A209900000015']);
+  await main(['--funding-keyword', '教学', '--document-number', 'A209900000016']);
   assert.deepEqual(events, ['todo', 'open', 'funds', 'close']);
   assert.deepEqual(kinds, [undefined]);
   const body = new URLSearchParams(f.calls[0][1].body);
   assert.deepEqual([body.get('fundingItemsCode'), body.get('accountBook'), body.get('reimbursementKind')],
     ['SYN-0002', 'ST00', 'applyMoney']);
   await assert.rejects(main(['--funding-keyword', '合成', '--funding-kind', 'responsible',
-    '--document-number', 'A209900000015']), { code: 'item_ambiguous' });
+    '--document-number', 'A209900000016']), { code: 'item_ambiguous' });
   assert.equal(kinds[1], 'responsible');
   assert.equal(f.calls.length, 1);
   assert.equal(events.at(-1), 'close');

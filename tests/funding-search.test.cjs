@@ -153,8 +153,8 @@ test('funding keyword matches an exact code or exactly one label, otherwise fail
 
 test('CLI needs an original form and validates options before browser startup', () => {
   assert.deepEqual(parseFundingArgs(['--help']), { help: true });
-  assert.deepEqual(parseFundingArgs(['--document-number', 'A209900000015']),
-    { help: false, query: {}, documentNumber: 'A209900000015' });
+  assert.deepEqual(parseFundingArgs(['--document-number', 'A209900000016']),
+    { help: false, query: {}, documentNumber: 'A209900000016' });
   const full = parseFundingArgs(['--biz-id', 'A'.repeat(32), '--task-id', taskId, '--kind', 'responsible',
     '--param-value', '合成', '--page-size', '20', '--keyword', ' 教学 ']);
   assert.deepEqual(full.query, { kind: 'responsible', paramValue: '合成', pageSize: 20 });
@@ -203,7 +203,7 @@ function cliFixture(t) {
   });
   t.mock.method(require('../dist/automation/open-reimbursement'), 'openReimbursementByIds', async (_session, ctx, target) => {
     events.push('open');
-    assert.deepEqual(target, { bizId: 'B'.repeat(32), taskId, isReadOnly: false, expectedDocumentNumber: 'A209900000015' });
+    assert.deepEqual(target, { bizId: 'B'.repeat(32), taskId, isReadOnly: false, expectedDocumentNumber: 'A209900000016' });
     ctx.setActiveFrame(f.frame);
   });
   t.mock.method(browser, 'rememberAuthenticatedSession', async () => { events.push('remember'); });
@@ -216,7 +216,7 @@ function cliFixture(t) {
 test('CLI resolves and opens the form, queries the list inside it, saves, matches the keyword and closes', async t => {
   const fixture = cliFixture(t);
   const sigint = process.listenerCount('SIGINT'), sigterm = process.listenerCount('SIGTERM');
-  await main(['--document-number', 'A209900000015', '--keyword', '教学']);
+  await main(['--document-number', 'A209900000016', '--keyword', '教学']);
   assert.deepEqual(fixture.events, ['create', 'authenticate', 'todo', 'open', 'remember', 'close']);
   assert.equal(fixture.f.calls.length, 1);
   assert.equal(fixture.mutation.mock.callCount(), 0);
@@ -230,7 +230,7 @@ test('CLI resolves and opens the form, queries the list inside it, saves, matche
 test('CLI failure closes its browser and leaves no misleading result file', async t => {
   const fixture = cliFixture(t);
   fixture.f.frame.evaluate = async () => ({ error: 'authentication', status: 403 });
-  await assert.rejects(main(['--document-number', 'A209900000015']), { code: 'authentication' });
+  await assert.rejects(main(['--document-number', 'A209900000016']), { code: 'authentication' });
   assert.equal(fixture.events.at(-1), 'close');
   assert.equal(fs.existsSync(path.join(fixture.directory, 'oa-funding-search')), false);
 });
