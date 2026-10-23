@@ -217,8 +217,9 @@ function actionsCell(row) {
     // 报销文件已就绪: a state, not an action; 打印 and 下载 use the file made ahead.
     const done = button('报销文件已就绪', `${row.billCode} 的打印文件已生成，${expiresIn(file)}内有效`, () => undefined, true);
     done.classList.add('file-ready');
-    const print = button(file.printed ? '已点击打印' : '打印', file.printed ? `已点击过打印，可再次打印 ${row.billCode}` : `打印 ${row.billCode}`, () => openReady(file));
-    if (file.printed) print.classList.add('printed');
+    const printed = file.printed || row.printed;
+    const print = button(printed ? '已点击打印' : '打印', printed ? `已点击过打印，可再次打印 ${row.billCode}` : `打印 ${row.billCode}`, () => openReady(file));
+    if (printed) print.classList.add('printed');
     cell.append(done, print,
       button('下载', `下载 ${row.billCode}.pdf`, () => saveReady(file)));
   } else if (entry?.status === 'queued' || entry?.status === 'requesting') {
@@ -228,6 +229,14 @@ function actionsCell(row) {
     else waiting.textContent = '等待生成…';
     cell.append(waiting);
   } else {
+    // Clicked before (a file since expired, an earlier login): the server keeps it.
+    if (row.printed) {
+      const note = document.createElement('span');
+      note.className = 'hint small printed';
+      note.textContent = '已点击打印';
+      note.title = `已点击过打印 ${row.billCode}；重新生成打印文件可再次打印`;
+      cell.append(note);
+    }
     const make = button(entry?.status === 'failed' ? '重新生成' : '生成打印文件',
       entry?.status === 'failed' ? `上次未能生成：${entry.error}` : `在后台生成 ${row.billCode} 的打印文件（PDF）`, () => prepareFiles([row.bizId]));
     make.classList.add('make');
@@ -249,8 +258,10 @@ const expiresIn = file => `${Math.max(1, Math.round((Date.parse(file.expiresAt) 
 function openReady(file) {
   if (!readyFile(file.bizId)) return expired(file);
   window.open(file.printUrl, '_blank', 'noopener');
-  // The server records it too (the print page was opened), so a reload still shows 已点击打印.
+  // The server records it too (the print page was opened), so a reload, a restart or a new login still shows 已点击打印.
   file.printed = true;
+  const row = state.rows.find(item => item.bizId === file.bizId);
+  if (row) row.printed = true;
   render();
 }
 

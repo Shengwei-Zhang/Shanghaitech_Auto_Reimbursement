@@ -18,6 +18,7 @@ import { pagePath } from './page-path';
 import type { Deployment } from './deployment';
 import { equalSecret, Limiter, SessionRegistry } from './sessions';
 import { UsageStats } from '../infrastructure/usage-stats';
+import { PrintMarks } from '../infrastructure/print-marks';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
  * / redirects here. */
@@ -75,6 +76,8 @@ export function createApp(options: AppOptions) {
     maxActiveJobs: 1, maxParses: 0, admins: [] };
   /** Usage counts for the administrator (no personal data; see usage-stats.ts). */
   const usage = new UsageStats(path.join(options.dataDir, 'stats'));
+  /** 报销单打印's 已点击打印 per account, across restarts (see print-marks.ts). */
+  const printMarks = new PrintMarks(path.join(options.dataDir, 'print-marks'));
   /** 票据 parsing (OCR of scans takes a CPU core for seconds): at most maxParses at once, the rest wait their turn. */
   const parses = new Limiter(deployment.maxParses);
   const shared = deployment.mode === 'local';
@@ -89,7 +92,7 @@ export function createApp(options: AppOptions) {
     api.useJobs({ service, store });
     return api;
   };
-  const sessions = new SessionRegistry(() => { const api = makeApi(); api.usage = usage; return api; },
+  const sessions = new SessionRegistry(() => { const api = makeApi(); api.usage = usage; api.printMarks = printMarks; return api; },
     { shared, idleMs: deployment.idleMinutes * 60_000, max: deployment.maxSessions });
   /** Who may see the statistics: a listed school account; locally, with no list, the one logged-in user. */
   const isAdmin = (api: OaApi) => {

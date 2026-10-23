@@ -435,7 +435,7 @@ test('报销单打印: 生成打印文件 per row or for all picked; 请求中, 
   const rows = [
     { bizId: 'a'.repeat(32), billCode: 'A209900000013', kind: '用款申请单', date: '2026-10-10', amount: '300.00', remark: '测试一', print: 'check' },
     { bizId: 'b'.repeat(32), billCode: 'A209900000014', kind: '用款申请单', date: '2026-10-11', amount: '120.00', remark: '测试二', print: 'yes' },
-    { bizId: 'c'.repeat(32), billCode: 'D209900000036', kind: '境内差旅单', date: '2026-09-04', amount: '980.00', remark: '测试三', print: 'yes' },
+    { bizId: 'c'.repeat(32), billCode: 'D209900000036', kind: '境内差旅单', date: '2026-09-04', amount: '980.00', remark: '测试三', print: 'yes', printed: true },
   ];
   const made: string[] = [];
   let release: (() => void) | undefined;
@@ -482,6 +482,9 @@ test('报销单打印: 生成打印文件 per row or for all picked; 请求中, 
   await opened.close();
   await expect(row('A209900000013').getByRole('button', { name: '已点击打印' })).toBeEnabled();
   await expect(row('A209900000013').getByRole('button', { name: '打印', exact: true })).toHaveCount(0);
+  // Clicked in an earlier session: shown with no file ready, and 生成打印文件 still offered.
+  await expect(row('D209900000036').locator('span.printed')).toHaveText('已点击打印');
+  await expect(row('D209900000036').getByRole('button', { name: '生成打印文件' })).toBeEnabled();
 
   // Several at once: the ready one is not made again.
   for (const code of ['A209900000013', 'A209900000014', 'D209900000036']) await row(code).locator('input[type=checkbox]').check();

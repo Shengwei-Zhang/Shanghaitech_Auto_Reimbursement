@@ -365,3 +365,4 @@ body > #app, body > .login-screen { flex:1 0 auto; }
   background:var(--lime-soft); border:1px solid #d8e6a0; border-radius:999px; padding:1px 9px; }
 .print-table th.actions { width:300px; }
 .print-table td.actions button.printed { color:var(--muted); }
+.print-table td.actions span.printed { margin-right:8px; }

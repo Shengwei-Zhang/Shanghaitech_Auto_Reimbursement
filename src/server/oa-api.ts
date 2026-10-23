@@ -11,6 +11,7 @@ import type { FormContext, FormType, PageInvoice } from './form-routes';
 import { OaSession, record } from './oa-session';
 import { randomBytes } from 'node:crypto';
 import { renderPrintPdf } from '../infrastructure/print-pdf';
+import type { PrintMarks } from '../infrastructure/print-marks';
 
 export { defaultLogin, savedCredentials, type LoginEvidence, type LoginHooks, type PasswordLogin, type SavedCredentials } from './oa-session';
 
@@ -24,11 +25,11 @@ interface ReadyFile { bizId: string; billCode: string; html: string; pdf: Buffer
   /** When its print page was first opened (the user clicked 打印). */
   printedAt?: number }
 export interface ReadyInfo { bizId: string; billCode: string; printUrl: string; pdfUrl: string; filename: string; expiresAt: string;
-  /** 打印 has been clicked (its print page opened) at least once. */
+  /** 打印 has been clicked (its print page opened) at least once, for this file or an earlier one of the bill. */
   printed: boolean }
-const readyInfo = (file: ReadyFile): ReadyInfo => ({ bizId: file.bizId, billCode: file.billCode, printUrl: `/print/ready/${file.token}`,
+const readyInfo = (file: ReadyFile, printed: boolean): ReadyInfo => ({ bizId: file.bizId, billCode: file.billCode, printUrl: `/print/ready/${file.token}`,
   pdfUrl: `/print/ready/${file.token}.pdf`, filename: `${file.billCode}.pdf`, expiresAt: new Date(file.expires).toISOString(),
-  printed: file.printedAt !== undefined });
+  printed: printed || file.printedAt !== undefined });
 
 /** The page's school login (OaSession) with what every 报销类型 shares: funds, invoice folders, suppliers,
  * printing. Each 报销类型 is a module of its own (apply-money-api.ts, travel-api.ts) registered in `types`;
@@ -49,6 +50,8 @@ export class OaApi extends OaSession {
   /** 打印文件 made ahead, one per bill: its print page and PDF, opened as often as needed under one token until it
    * expires (READY_MS) or the login ends. In memory only; at most READY_MAX per browser, the oldest gives way. */
   private ready = new Map<string, ReadyFile>();
+  /** Bills this account has clicked 打印 for, kept on disk (infrastructure/print-marks.ts), when the server keeps them. */
+  printMarks?: PrintMarks;
 
   protected onReset(): void {
     this.applyMoney.reset();
@@ -159,7 +162,8 @@ export class OaApi extends OaSession {
       const { total, rows } = await this.read((reader, page) => listPrintableHttp(reader, page));
       this.printable = new Map(rows.map(row => [row.bizId, { billCode: row.billCode, print: row.print }]));
       return { ...(total === undefined ? {} : { total }), rows: rows.map(row => ({ bizId: row.bizId, billCode: row.billCode, status: row.status,
-        statusText: row.statusText, kind: row.kindText, amount: row.reimbursementAmount, remark: row.remark, date: row.fillinDate.slice(0, 10), print: row.print })) };
+        statusText: row.statusText, kind: row.kindText, amount: row.reimbursementAmount, remark: row.remark, date: row.fillinDate.slice(0, 10), print: row.print,
+        printed: this.wasPrinted(row.bizId) })) };
     } catch (error) { this.fail(error); }
   }
 
@@ -215,7 +219,7 @@ export class OaApi extends OaSession {
     if (bill.print !== 'yes') throw new AppError(409, `报销单 ${bill.billCode} 当前不能打印。`);
     this.dropExpired();
     const known = this.ready.get(bizId as string);
-    if (known) return readyInfo(known);
+    if (known) return this.info(known);
     try {
       const page = await this.read((reader, query) => fetchPrintPageHttp(reader, query, bizId as string))
         .catch(error => { throw error instanceof PrintError && error.code === 'not_printable' ? new PrintError('not_printable', `报销单 ${bill.billCode}：${error.message}`) : error; });
@@ -226,14 +230,14 @@ export class OaApi extends OaSession {
         expires: Date.now() + READY_MS };
       this.ready.set(file.bizId, file);
       while (this.ready.size > READY_MAX) this.ready.delete([...this.ready.values()].sort((a, b) => a.expires - b.expires)[0].bizId);
-      return readyInfo(file);
+      return this.info(file);
     } catch (error) { this.fail(error); }
   }
 
   /** The 打印文件 still ready, for the print page after a reload. */
   readyFiles(): { files: ReadyInfo[] } {
     this.dropExpired();
-    return { files: [...this.ready.values()].map(readyInfo) };
+    return { files: [...this.ready.values()].map(file => this.info(file)) };
   }
 
   /** A ready 打印文件 by its token: the print page, or the PDF; not used up by opening it. */
@@ -241,8 +245,22 @@ export class OaApi extends OaSession {
     this.dropExpired();
     const file = [...this.ready.values()].find(item => item.token === token);
     if (!file) return undefined;
-    if (kind === 'html') file.printedAt ??= Date.now();
+    if (kind === 'html') {
+      file.printedAt ??= Date.now();
+      const account = this.account();
+      if (account) this.printMarks?.mark(account, file.bizId);
+    }
     return kind === 'pdf' ? { body: file.pdf, type: 'application/pdf', filename: `${file.billCode}.pdf` } : { body: file.html, type: 'text/html; charset=utf-8' };
+  }
+
+  private info(file: ReadyFile): ReadyInfo {
+    return readyInfo(file, this.wasPrinted(file.bizId));
+  }
+
+  /** 打印 was clicked for this bill under this login's account, in this or an earlier session. */
+  private wasPrinted(bizId: string): boolean {
+    const account = this.account();
+    return Boolean(account && this.printMarks?.has(account, bizId));
   }
 
   private dropExpired(): void {

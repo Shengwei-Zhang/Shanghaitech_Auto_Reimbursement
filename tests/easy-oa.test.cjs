@@ -571,7 +571,7 @@ test('报销单打印: only 提交 bills of every type, filtered by OA; the join
 });
 
 test('打印文件: made ahead per bill, opened again and again until it expires; only allowed bills, only this session', async t => {
-  const { call, base, headers, oa } = await easyServer(t);
+  const { call, base, headers, oa, dataDir } = await easyServer(t);
   await call('GET', '/api/oa/print');
   const inApproval = 'a'.repeat(32), travel = 'c'.repeat(32);
   assert.equal((await call('POST', '/api/oa/print/file', { bizId: inApproval })).status, 409, '提交 needs the OA permission check first');
@@ -616,6 +616,29 @@ test('打印文件: made ahead per bill, opened again and again until it expires
 
   await call('POST', '/api/oa/logout');
   assert.equal((await fetch(`${base}${made.data.printUrl}`, cookie)).status, 404, 'the login ending drops its files');
+
+  // 已点击打印 outlives the file and the login: kept on disk for the account.
+  await call('POST', '/api/oa/login', { username: '900001', password: 'any' });
+  const listed = (await call('GET', '/api/oa/print')).data.rows;
+  assert.deepEqual(listed.filter(row => row.printed).map(row => row.bizId), [inApproval]);
+  await call('GET', `/api/oa/print/permission?bizId=${inApproval}`);
+  assert.equal((await call('POST', '/api/oa/print/file', { bizId: inApproval })).data.printed, true, 'a new file of the bill shows it too');
+  const marks = fs.readFileSync(path.join(dataDir, 'print-marks', 'marks.json'), 'utf8');
+  assert.ok(marks.includes(inApproval));
+  assert.ok(!marks.includes('900001') && !marks.includes('A209900000013'), 'no account or bill number on disk');
+});
+
+test('print marks: per account, kept across a restart, the newest kept', () => {
+  const { PrintMarks } = require('../dist/infrastructure/print-marks.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'print-marks-'));
+  try {
+    const marks = new PrintMarks(dir);
+    marks.mark('900001', 'a'.repeat(32));
+    assert.equal(marks.has('900001', 'a'.repeat(32)), true);
+    assert.equal(marks.has('200001', 'a'.repeat(32)), false, 'another account has not printed it');
+    assert.equal(new PrintMarks(dir).has(' 900001 ', 'a'.repeat(32)), true, 'a restart keeps it');
+    assert.equal(fs.statSync(path.join(dir, 'marks.json')).mode & 0o777, 0o600);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('银行转账: the page finds the account among OA suppliers by exact name; the job input keeps the choice', async t => {
