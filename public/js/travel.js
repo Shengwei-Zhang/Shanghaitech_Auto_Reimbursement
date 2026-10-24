@@ -737,7 +737,7 @@ function initTravel() {
   });
   resetTravel();
   registerForm(TRAVEL, {
-    title: '填写境内差旅单', moneyLegend: '收款人与附件', invoiceLegend: '票据（发票与行程附件）', layout: 'travel', budgetsPath: '/api/oa/travel/budgets', reset: resetTravel, submit: () => submitTravel(),
+    title: '填写境内差旅单', moneyLegend: '收款人', invoiceLegend: '票据（发票与行程附件）', layout: 'travel', budgetsPath: '/api/oa/travel/budgets', reset: resetTravel, submit: () => submitTravel(),
     // A run started before a page reload is still followed.
     load: () => api('GET', '/api/oa/travel').then(({ run }) => { if (run) showTravelRun(run); }).catch(() => undefined),
     activate: () => { $('attachments').min = '0'; }, onSelect: () => loadTravelForms(), onFund: loadBorrows, onSubjects: renderLines,

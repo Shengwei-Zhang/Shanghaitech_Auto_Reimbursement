@@ -431,6 +431,22 @@ test('the login page explains the project, and every page has the footer', async
   }
 });
 
+test('a login error with a long address wraps inside the card; the form keeps its width', async ({ page }) => {
+  await page.route('**/api/oa/login', route => route.fulfill({ status: 502, json: { error:
+    '学校认证服务器请求未完成；请检查校园网络/VPN。（sapbpm-new.shanghaitech.edu.cn:9091/bpm-new/rbReimbursementQuery/forwardRbReimbursementOwnerQuery.do）' } }));
+  await page.goto(PAGE_PATH);
+  const card = await page.locator('.login-card').boundingBox();
+  await page.fill('#username', '900001');
+  await page.fill('#password', 'any');
+  await page.click('#login-button');
+  await expect(page.locator('#login-error')).toContainText('forwardRbReimbursementOwnerQuery.do');
+  expect((await page.locator('.login-card').boundingBox())!.width).toBe(card!.width);
+  for (const id of ['#login-error', '#username', '#login-button']) {
+    const box = (await page.locator(id).boundingBox())!;
+    expect(box.x + box.width, id).toBeLessThanOrEqual(card!.x + card!.width);
+  }
+});
+
 test('报销单打印: 生成打印文件 per row or for all picked; 请求中, then 报销文件已就绪 (not clickable) with 打印 and 下载', async ({ page }) => {
   const rows = [
     { bizId: 'a'.repeat(32), billCode: 'A209900000013', kind: '用款申请单', date: '2026-10-10', amount: '300.00', remark: '测试一', print: 'check' },
