@@ -358,9 +358,11 @@ const unfilled = rows => rows.filter(row => !String(row.amount).trim()).slice(1)
 function renderLines() {
   if (!$('line-rows')) return;
   const subjects = state.subjects ?? [];
-  // The first line defaults to the usual 差旅 item.
+  // A budget item of the fund chosen before is not one of this fund's.
+  for (const line of state.lines) if (!subjects.some(item => subjectKey(item) === line.subject)) line.subject = '';
+  // The first line defaults to the usual 差旅 item: 国内差旅/参会费, or another 国内差旅… of this fund.
   if (state.lines.length === 1 && !state.lines[0].subject) {
-    const usual = subjects.find(item => item.name === '国内差旅/参会费');
+    const usual = subjects.find(item => item.name === '国内差旅/参会费') ?? subjects.find(item => item.name.includes('国内差旅'));
     if (usual) state.lines[0].subject = subjectKey(usual);
   }
   $('line-rows').replaceChildren(...state.lines.map((line, index) => {

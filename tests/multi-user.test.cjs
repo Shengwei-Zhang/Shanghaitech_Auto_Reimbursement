@@ -294,7 +294,8 @@ test('footer: the same text on every page; the contact comes from REIM_CONTACT_E
   assert.throws(() => deploymentFromEnv({ REIM_CONTACT_EMAIL: 'not an address' }), /邮箱/);
   const { port } = await serverApp(t, { deployment: { ...SERVER, contact: 'help@reimbursement-copilot.invalid' } });
   const site = await proxied(port, 'GET', '/site.json');
-  assert.deepEqual(site.data, { contact: 'help@reimbursement-copilot.invalid' });
+  const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  assert.deepEqual(site.data, { contact: 'help@reimbursement-copilot.invalid', version }, 'the version of package.json');
   assert.equal(site.headers['set-cookie'], undefined, 'no session is opened for the footer');
   for (const file of ['easy-v2.html', 'print-list.html', 'admin.html']) {
     const html = fs.readFileSync(path.join(__dirname, '..', 'public', file), 'utf8');

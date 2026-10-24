@@ -83,7 +83,7 @@ function applyClaimType() {
   const type = currentType(), form = currentForm();
   for (const element of document.querySelectorAll('[data-claim]')) element.hidden = element.dataset.claim !== type;
   $('claim-title').textContent = form.title;
-  $('money-legend').textContent = form.moneyLegend ?? '金额与用途';
+  $('money-legend').textContent = form.moneyLegend ?? '收款和用途';
   $('invoice-legend').textContent = form.invoiceLegend ?? '发票';
   $('claim').dataset.type = form.layout ?? '';
   form.activate?.();

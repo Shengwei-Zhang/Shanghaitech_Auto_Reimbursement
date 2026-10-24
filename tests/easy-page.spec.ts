@@ -10,6 +10,9 @@ const FUNDS = { total: 2, pageCount: 1, items: [
 const MONEY_SUBJECTS = [{ code: '30', name: '委托服务费', quotaCode: '01', quotaName: '业务费', balance: '9000.00' }];
 const TRAVEL_SUBJECTS = [{ code: '09', name: '国内差旅/参会费', quotaCode: '02', quotaName: '业务费', balance: '4910.83' },
   { code: '10', name: '会议费', quotaCode: '02', quotaName: '业务费', balance: '3000.00' }];
+/** Another fund's 差旅 items: its 国内差旅 item has another name and code. */
+const TRAVEL_SUBJECTS_P001 = [{ code: '10', name: '会议费', quotaCode: '03', quotaName: '业务费', balance: '800.00' },
+  { code: '05', name: '国内差旅费', quotaCode: '03', quotaName: '业务费', balance: '1200.00' }];
 
 interface Stub { posts: Array<{ path: string; body: Record<string, unknown> }>; errors: string[] }
 
@@ -30,7 +33,8 @@ async function openPage(page: Page): Promise<Stub> {
         at: '2026-10-22T08:00:00.000Z', savedPassword: false, steps: ['统一身份认证'] } });
       case 'GET /api/oa/funds': return json(route, FUNDS);
       case 'GET /api/oa/budgets': return json(route, { fundingCode: url.searchParams.get('fundingCode'), total: 1, balance: '193110.83', subjects: MONEY_SUBJECTS });
-      case 'GET /api/oa/travel/budgets': return json(route, { fundingCode: url.searchParams.get('fundingCode'), total: 2, balance: '193110.83', subjects: TRAVEL_SUBJECTS });
+      case 'GET /api/oa/travel/budgets': return json(route, { fundingCode: url.searchParams.get('fundingCode'), total: 2, balance: '193110.83',
+        subjects: url.searchParams.get('fundingCode') === 'P001' ? TRAVEL_SUBJECTS_P001 : TRAVEL_SUBJECTS });
       case 'GET /api/oa/forms': return json(route, { forms: [] });
       case 'GET /api/oa/folder-invoices': return json(route, { invoices: [{ folderId: '1879423340632997890', folderName: '自行上传票据',
         number: '26117000000000000041', seller: '某商贸公司', date: '2026-09-08', amount: '300.00', balance: '300.00', selectable: true, reason: '' }], truncated: false });
@@ -291,6 +295,34 @@ test('an open dropdown that is still loading is not redrawn (no flicker)', async
   await expect.poll(() => loading.textContent(), { timeout: 2000 }).not.toBe(before);
 });
 
+test('section titles: 选择经费, then 收款和用途 (用款申请单) or 收款人 (境内差旅单)', async ({ page }) => {
+  await openPage(page);
+  await expect(page.locator('#section-nav')).toContainText('选择经费');
+  await expect(page.locator('#money-legend')).toHaveText('收款和用途');
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  await expect(page.locator('#section-nav')).toContainText('选择经费');
+  await expect(page.locator('#money-legend')).toHaveText('收款人');
+  await page.locator('#claim-type').selectOption('用款申请单');
+  await expect(page.locator('#money-legend')).toHaveText('收款和用途');
+});
+
+test('境内差旅单: the 国内差旅 budget item is picked for the first line, again after another fund is chosen', async ({ page }) => {
+  await openPage(page);
+  await page.locator('#claim-type').selectOption('境内差旅单');
+  const first = page.locator('#line-rows tr:first-child select');
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  await expect(first).toHaveValue('02:09');
+  // This fund has no 国内差旅/参会费: its 国内差旅费 is picked, not the 会议费 listed first.
+  await choose(page, '#fund-select', 'P001');
+  await expect(first).toHaveValue('03:05');
+  await choose(page, '#fund-select', '2099F9999-000-01');
+  await expect(first).toHaveValue('02:09');
+  // A choice of one's own is kept while the fund stays.
+  await first.selectOption('02:10');
+  await page.locator('#line-rows tr:first-child input').last().fill('会议');
+  await expect(first).toHaveValue('02:10');
+});
+
 test('清空重填 keeps the 报销类型: a 境内差旅单 starts over as a 境内差旅单', async ({ page }) => {
   await openPage(page);
   await page.locator('#claim-type').selectOption('境内差旅单');
@@ -425,6 +457,7 @@ test('the login page explains the project, and every page has the footer', async
   // The address comes from REIM_CONTACT_EMAIL (help@reimbursement-copilot.invalid for the test server).
   await expect(page.locator('#footer-contact')).toHaveText('有任何问题请邮件联系 help@reimbursement-copilot.invalid');
   await expect(page.locator('#footer-email')).toHaveAttribute('href', 'mailto:help@reimbursement-copilot.invalid');
+  await expect(page.locator('#footer-version')).toHaveText(/^v\d+\.\d+\.\d+$/);
   for (const path of ['/print-list', '/admin']) {
     await page.goto(path);
     await expect(page.locator('.site-footer')).toContainText('本项目旨在帮助各位同事便捷制作各种报销单');

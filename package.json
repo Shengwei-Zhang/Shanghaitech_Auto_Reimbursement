@@ -1,6 +1,6 @@
 {
   "name": "reimbursement-copilot",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "description": "Reimbursement Copilot (报销助手): fills, saves and submits ShanghaiTech OA reimbursements over HTTP from a local page.",
   "main": "dist/server/main.js",

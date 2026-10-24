@@ -19,6 +19,7 @@ import type { Deployment } from './deployment';
 import { equalSecret, Limiter, SessionRegistry } from './sessions';
 import { UsageStats } from '../infrastructure/usage-stats';
 import { PrintMarks } from '../infrastructure/print-marks';
+import { APP_VERSION } from './version';
 
 /** The page's address: /Reim-Copilot on the deploy and main branches, /Reim-Copilot elsewhere (see page-path.ts).
  * / redirects here. */
@@ -160,7 +161,7 @@ export function createApp(options: AppOptions) {
       const url = new URL(req.url || '/', here);
       const cookie = (req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith('oa_session='))?.slice(11) || '';
       // What every page's footer shows; needs no session, so it never opens one.
-      if (req.method === 'GET' && url.pathname === '/site.json') return json(200, { contact: deployment.contact ?? '' });
+      if (req.method === 'GET' && url.pathname === '/site.json') return json(200, { contact: deployment.contact ?? '', version: APP_VERSION });
       if (req.method === 'GET' && url.pathname === '/api/session') {
         const session = sessions.open(cookie);
         res.setHeader('Set-Cookie', `oa_session=${session.id}; HttpOnly; SameSite=Strict; Path=/${shared ? '' : '; Secure'}`);
